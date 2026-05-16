@@ -1,0 +1,123 @@
+services:
+  # 1. 中央大腦：Redis (負責任務排隊)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"  # host 6380 → 容器 6379 (避開其他專案佔的 6379)
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # 2. 資料金庫：PostgreSQL (負責存文字與狀態)
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5433:5432"  # host 5433 → 容器 5432 (避開 modeshiftlog-db 佔的 5432)
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # 3. 實體貨櫃場：MinIO (負責存大型音檔)
+  # minio:
+  #   image: minio/minio
+  #   command: server /data --console-address ":9001"
+  #   environment:
+  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+  #   ports:
+  #     - "9000:9000" # API 通訊埠 (你的程式打這個)
+  #     - "9001:9001" # Web UI 管理介面 (你用瀏覽器看這個)
+  #   volumes:
+  #     - minio_data:/data
+  #   restart: always
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # ==========================================
+  # 以下是你自己寫的兩個服務
+  # ==========================================
+
+  # 4. 爬蟲服務 (Repo 1)
+  finance-scraper-service:
+    image: ${SCRAPER_IMAGE}
+    restart: unless-stopped
+    ports:
+      - "${SCRAPER_PORT:-8080}:8080"  # finance-scraper-service 容器內監聽 8080
+    env_file:
+      - ../finance-scraper-service/.env  # 重用 finance-scraper-service 自己的 .env
+    environment:
+      # infra 層級連線設定,會覆蓋 env_file 同名變數
+      # finance-scraper-service 程式讀的是 PG_DSN (不是 DB_URL),要用 docker 服務名 postgres
+      - PG_DSN=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - REDIS_URL=redis://redis:6379/0  # 目前 finance-scraper-service 沒讀,保留給未來
+      # 容器內無法用 localhost 連到 host 上的 vLLM gateway
+      # 若 .env 沒設 VLLM_BASE_URL,fallback 走 host.docker.internal
+      - VLLM_BASE_URL=${VLLM_BASE_URL:-http://host.docker.internal:8000/v1}
+      # - MINIO_ENDPOINT=minio:9000
+      # - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      # - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Linux 上讓容器能用 host.docker.internal 連回 host
+    volumes:
+      # local 開發:mount 覆蓋 image 內建 config,改 yaml 不用 rebuild
+      - ../finance-scraper-service/config:/app/config:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      # minio:
+      #   condition: service_healthy
+
+  # 5. STT 運算服務 (Repo 2)
+  stt-ai-worker:
+    image: ${STT_IMAGE}
+    ports:
+      - "8001:8000"  # 前端走 host 8001 → 容器 8000 (避開 finance-scraper-service 佔的 8000)
+    env_file:
+      - ../stt-ai-worker/.env  # 重用 stt-ai-worker 自己的 .env (MODEL / DEVICE / COMPUTE_TYPE 等)
+    environment:
+      # infra 層級連線設定,會覆蓋 env_file 同名變數
+      - REDIS_URL=redis://redis:6379/0
+      - DB_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # - MINIO_ENDPOINT=minio:9000
+      # - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      # - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./stt_output:/data/output
+      - /home/user/Models:/root/.cache/huggingface
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      # minio:
+      #   condition: service_healthy
+    # GPU 模式 (stt-ai-worker .env 設 DEVICE=cuda 時需要)
+    # 改純 CPU 時把那邊的 DEVICE 改成 cpu,並把下面 deploy 整段註解掉
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  pg_data:
+  # minio_data:
