@@ -107,7 +107,9 @@ services:
       # - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
     volumes:
       - ./stt_output:/data/output
-      - /home/user/Models:/root/.cache/huggingface
+      # HF_CACHE_DIR: host 上的 HuggingFace model cache,容器內 mount 到 /root/.cache/huggingface
+      # 避免每次重啟都重新下載幾 GB 的模型權重
+      - ${HF_CACHE_DIR:-./hf_cache}:/root/.cache/huggingface
     depends_on:
       redis:
         condition: service_healthy
@@ -141,7 +143,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # 共用 host 的 docker login credential,才能拉 private GHCR image
-      - /home/user/.docker/config.json:/config.json:ro
+      # DOCKER_CONFIG_PATH 預設 ~/.docker/config.json,要先在 host 上 docker login ghcr.io
+      - ${DOCKER_CONFIG_PATH:-~/.docker/config.json}:/config.json:ro
 
 volumes:
   pg_data:
