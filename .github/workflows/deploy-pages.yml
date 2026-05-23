@@ -1,0 +1,40 @@
+name: Deploy docs/ to GitHub Pages
+
+# 純靜態部署:直接把 docs/ 上傳到 Pages,不用 build。
+# 改 docs/ 內任何檔案 → push main → 自動發佈。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Upload docs/ as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

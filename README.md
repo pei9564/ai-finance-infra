@@ -12,7 +12,7 @@
 
 | Repo | 角色 | 語言/技術 |
 |---|---|---|
-| **ai-finance-infra** (本 repo) | 編排層 — docker-compose、共享 PG/Redis、watchtower 自動部署、系統文件 (`docs/`) | Docker Compose / Quartz |
+| **ai-finance-infra** (本 repo) | 編排層 — docker-compose、共享 PG/Redis、watchtower 自動部署、系統文件 (`docs/`) | Docker Compose / Static HTML |
 | [`finance-scraper-service`](https://github.com/pei9564/finance-scraper-service) | 從 GitHub releases / arXiv / HackerNews / RSS 收 AI infra 技術情報,vLLM 做中文摘要 | Python / FastAPI |
 | [`stt-ai-worker`](https://github.com/pei9564/stt-ai-worker) | 語音內容 (Podcast / YouTube) 轉逐字稿,faster-whisper GPU 推論 | Python / FastAPI |
 
@@ -141,4 +141,11 @@ K3s 部署完成後會把 manifests 與 GitOps 設定加進來,屆時 docker-com
 
 ## 相關文件
 
-完整架構決策記錄、ADR、跨專案 narrative 由 `docs/` 提供 (Quartz 站,透過 GitHub Pages 發佈)。原先位於獨立 repo [`ai-infra-portfolio`](https://github.com/pei9564/ai-infra-portfolio) 的內容正逐步遷入此處。
+完整架構決策記錄、ADR、互動式 artifact 由 `docs/` 提供,透過 GitHub Pages 發佈於 [pei9564.github.io/ai-finance-infra](https://pei9564.github.io/ai-finance-infra/)。
+
+`docs/` 是純靜態 HTML/CSS/JS,無 build step:
+- `index.html` — landing page,硬體基線 + 系統架構圖 + ADR 卡片
+- `demos/*.html` — 可拖動約束的互動式 artifact (vanilla JS)
+- `adr/*.md` — ADR 全文 (由 GitHub 直接渲染)
+
+原先位於獨立 repo [`ai-infra-portfolio`](https://github.com/pei9564/ai-infra-portfolio) 的 Quartz 站已退役,內容遷至本 repo `docs/`。

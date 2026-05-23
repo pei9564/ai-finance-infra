@@ -1,0 +1,193 @@
+/* ===========================================================================
+   ai-finance-infra · landing page styles
+   Self-contained,從原 Quartz custom.scss 抽出來,light mode only。
+   =========================================================================== */
+
+:root {
+  --light: #ffffff;
+  --lightgray: #e6e8eb;
+  --gray: #8b9096;
+  --darkgray: #3c4043;
+  --dark: #16191d;
+  --secondary: #1a56db;
+  --tertiary: #1e429f;
+  --highlight: rgba(26, 86, 219, 0.07);
+  --pf-radius: 8px;
+  --bodyFont: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --headerFont: "Schibsted Grotesk", "Inter", system-ui, sans-serif;
+  --codeFont: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+/* ---- Reset & base ---------------------------------------------------- */
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--bodyFont);
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--darkgray);
+  background: var(--light);
+}
+a { color: var(--secondary); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--secondary) 32%, transparent); transition: border-color 0.15s ease, color 0.15s ease; }
+a:hover { color: var(--tertiary); border-bottom-color: var(--secondary); }
+hr { border: 0; border-top: 1px solid var(--lightgray); margin: 2.5rem 0; }
+
+/* ---- Layout ---------------------------------------------------------- */
+main.center {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 5rem;
+}
+
+/* ---- Typographic rhythm --------------------------------------------- */
+h1, h2, h3, h4 {
+  font-family: var(--headerFont);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--dark);
+  line-height: 1.25;
+}
+h1 { font-size: 1.9rem; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.6rem; }
+h2 { font-size: 1.38rem; margin-top: 2.4rem; padding-bottom: 0.35rem; border-bottom: 1px solid var(--lightgray); }
+h3 { font-size: 1.12rem; margin-top: 1.7rem; }
+p, li { line-height: 1.7; }
+strong { color: var(--dark); font-weight: 650; }
+
+.page-header { margin-bottom: 2.2rem; }
+.page-eyebrow {
+  font-family: var(--codeFont);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gray);
+  margin: 0 0 0.5rem;
+}
+.page-lede { color: var(--darkgray); font-size: 1.05rem; margin-top: 0.5rem; }
+
+/* ---- Tables --------------------------------------------------------- */
+table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 1.6rem 0;
+  font-size: 0.92rem;
+  border: 1px solid var(--lightgray);
+  border-radius: var(--pf-radius);
+  overflow: hidden;
+}
+thead th {
+  background: color-mix(in srgb, var(--secondary) 7%, var(--light));
+  color: var(--dark);
+  font-weight: 650;
+  text-align: left;
+  white-space: nowrap;
+}
+th, td { padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--lightgray); vertical-align: top; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr { transition: background 0.12s ease; }
+tbody tr:hover { background: var(--highlight); }
+
+/* ---- Mermaid block --------------------------------------------------- */
+.mermaid {
+  margin: 1.6rem 0;
+  text-align: center;
+  background: var(--light);
+  border: 1px solid var(--lightgray);
+  border-radius: var(--pf-radius);
+  padding: 1.4rem 1rem;
+  font-family: var(--bodyFont);
+}
+
+/* ---- ARD card gallery (homepage cards) ------------------------------ */
+.ard-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin: 2rem 0 2.5rem;
+}
+.ard-card {
+  border: 1px solid var(--lightgray);
+  border-radius: var(--pf-radius);
+  padding: 22px 20px 18px;
+  background: var(--light);
+  display: flex;
+  flex-direction: column;
+  transition:
+    border-color 0.15s ease,
+    transform 0.1s ease,
+    box-shadow 0.15s ease;
+}
+.ard-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.08);
+}
+.ard-card[data-accent="blue"]:hover { border-color: var(--secondary); }
+.ard-card[data-accent="green"]:hover { border-color: #3fb950; }
+.ard-card[data-accent="amber"]:hover { border-color: #d29922; }
+
+.ard-kicker {
+  font-family: var(--codeFont);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gray);
+  margin: 0 0 0.5rem;
+}
+.ard-card h2.ard-title {
+  font-size: 1.15rem;
+  margin: 0 0 0.55rem;
+  font-weight: 700;
+  border-bottom: none;
+  padding-bottom: 0;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin-top: 0;
+  font-family: var(--headerFont);
+}
+.ard-problem {
+  color: var(--darkgray);
+  font-size: 0.92rem;
+  margin: 0 0 0.9rem;
+  line-height: 1.6;
+  flex: 1;
+}
+.ard-cta {
+  margin: 0;
+  font-family: var(--codeFont);
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.ard-cta a { cursor: pointer; }
+.ard-card--ghost {
+  border-style: dashed;
+  opacity: 0.78;
+}
+.ard-card--ghost .ard-cta { display: none; }
+
+/* ---- Inline code & pre ---------------------------------------------- */
+code {
+  font-family: var(--codeFont);
+  font-size: 0.88em;
+  background: var(--highlight);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+pre {
+  border-radius: var(--pf-radius);
+  border: 1px solid var(--lightgray);
+  padding: 1rem;
+  overflow-x: auto;
+  background: #fafbfc;
+}
+pre code {
+  background: none;
+  padding: 0;
+}
+
+/* ---- Responsive ---------------------------------------------------- */
+@media (max-width: 640px) {
+  main.center { padding: 2rem 1rem 3rem; }
+  h1 { font-size: 1.55rem; }
+  table { font-size: 0.85rem; display: block; overflow-x: auto; white-space: nowrap; }
+}
