@@ -19,7 +19,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5433:5432"  # host 5433 → 容器 5432 (避開 modeshiftlog-db 佔的 5432)
+      - "5433:5432"  # host 5433 → 容器 5432 (避開其他本機專案佔的 5432)
     volumes:
       - pg_data:/var/lib/postgresql/data
     restart: always
@@ -60,26 +60,25 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"  # 讓 watchtower 自動更新這個 container
     ports:
       - "${SCRAPER_PORT:-8080}:8080"  # finance-scraper-service 容器內監聽 8080
-    env_file:
-      - ../finance-scraper-service/.env  # 重用 finance-scraper-service 自己的 .env
     environment:
-      # infra 層級連線設定,會覆蓋 env_file 同名變數
+      # --- infra 層級連線設定 (動態組裝) ---
       # finance-scraper-service 程式讀的是 PG_DSN (不是 DB_URL),要用 docker 服務名 postgres
       - PG_DSN=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_URL=redis://redis:6379/0  # 目前 finance-scraper-service 沒讀,保留給未來
-      # 容器內無法用 localhost 連到 host 上的 vLLM gateway
-      # 若 .env 沒設 VLLM_BASE_URL,fallback 走 host.docker.internal
+      # 容器內無法用 localhost 連到 host 上的 vLLM gateway,用 host.docker.internal
       - VLLM_BASE_URL=${VLLM_BASE_URL:-http://host.docker.internal:8000/v1}
       # STT 走同 compose network 的 service name,不要打 host 的 localhost
       - STT_BASE_URL=${STT_BASE_URL:-http://stt-ai-worker:8000}
+      # --- application 設定 (從 .env 讀,空值留 fallback) ---
+      - GITHUB_TOKEN=${GITHUB_TOKEN:?GITHUB_TOKEN required in .env}
+      - VLLM_MODEL=${VLLM_MODEL:-}
+      - VLLM_API_KEY=${VLLM_API_KEY:-}
+      - LOOKBACK_DAYS=${LOOKBACK_DAYS:-7}
       # - MINIO_ENDPOINT=minio:9000
       # - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
       # - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
     extra_hosts:
       - "host.docker.internal:host-gateway"  # Linux 上讓容器能用 host.docker.internal 連回 host
-    volumes:
-      # local 開發:mount 覆蓋 image 內建 config,改 yaml 不用 rebuild
-      - ../finance-scraper-service/config:/app/config:ro
     depends_on:
       redis:
         condition: service_healthy
@@ -96,12 +95,16 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"  # 讓 watchtower 自動更新這個 container
     ports:
       - "8001:8000"  # 前端走 host 8001 → 容器 8000 (避開 finance-scraper-service 佔的 8000)
-    env_file:
-      - ../stt-ai-worker/.env  # 重用 stt-ai-worker 自己的 .env (MODEL / DEVICE / COMPUTE_TYPE 等)
     environment:
-      # infra 層級連線設定,會覆蓋 env_file 同名變數
+      # --- infra 層級連線設定 (動態組裝) ---
       - REDIS_URL=redis://redis:6379/0
       - DB_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      # --- application 設定 (從 .env 讀,給合理 default) ---
+      - MODEL=${STT_MODEL:-medium}                    # tiny / base / small / medium / large-v3
+      - DEVICE=${STT_DEVICE:-cuda}                    # cuda (GPU) / cpu
+      - COMPUTE_TYPE=${STT_COMPUTE_TYPE:-int8}        # int8 / float16 (GPU 用 int8 省 VRAM)
+      - BATCH_SIZE=${STT_BATCH_SIZE:-4}               # 1 不批次最省電 / 4 平衡 / 8 最快
+      - LANGUAGE=${STT_LANGUAGE:-zh}                  # 留空=自動偵測; zh / en
       # - MINIO_ENDPOINT=minio:9000
       # - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
       # - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
@@ -117,8 +120,8 @@ services:
         condition: service_healthy
       # minio:
       #   condition: service_healthy
-    # GPU 模式 (stt-ai-worker .env 設 DEVICE=cuda 時需要)
-    # 改純 CPU 時把那邊的 DEVICE 改成 cpu,並把下面 deploy 整段註解掉
+    # GPU 模式 (STT_DEVICE=cuda 時需要 NVIDIA Container Toolkit)
+    # 改純 CPU 時把 .env 的 STT_DEVICE 改成 cpu,並把下面 deploy 整段註解掉
     deploy:
       resources:
         reservations:
