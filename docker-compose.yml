@@ -56,6 +56,8 @@ services:
   finance-scraper-service:
     image: ${SCRAPER_IMAGE}
     restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"  # 讓 watchtower 自動更新這個 container
     ports:
       - "${SCRAPER_PORT:-8080}:8080"  # finance-scraper-service 容器內監聽 8080
     env_file:
@@ -68,6 +70,8 @@ services:
       # 容器內無法用 localhost 連到 host 上的 vLLM gateway
       # 若 .env 沒設 VLLM_BASE_URL,fallback 走 host.docker.internal
       - VLLM_BASE_URL=${VLLM_BASE_URL:-http://host.docker.internal:8000/v1}
+      # STT 走同 compose network 的 service name,不要打 host 的 localhost
+      - STT_BASE_URL=${STT_BASE_URL:-http://stt-ai-worker:8000}
       # - MINIO_ENDPOINT=minio:9000
       # - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
       # - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
@@ -87,6 +91,9 @@ services:
   # 5. STT 運算服務 (Repo 2)
   stt-ai-worker:
     image: ${STT_IMAGE}
+    restart: unless-stopped
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"  # 讓 watchtower 自動更新這個 container
     ports:
       - "8001:8000"  # 前端走 host 8001 → 容器 8000 (避開 finance-scraper-service 佔的 8000)
     env_file:
@@ -117,6 +124,24 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+
+  # 6. 自動更新:每 30 秒問 GHCR 一次,有新 image 就 pull + 重啟有貼 label 的 container
+  # 只更新貼了 com.centurylinklabs.watchtower.enable=true 的 service (scraper + stt)
+  # DB / Redis 不會被動到。pin 版本 (改 :sha-xxx 或 :v1.2.3) 後也不會被升 — 因為 tag 不會變
+  watchtower:
+    # 用 nickfedor 的活躍 fork (containrrr/watchtower 維護停滯,Docker API client 太舊)
+    image: nickfedor/watchtower:latest
+    restart: unless-stopped
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=30
+      - WATCHTOWER_LABEL_ENABLE=true       # 只動有貼 enable label 的 container
+      - WATCHTOWER_CLEANUP=true             # 升完刪掉舊 image,不會塞滿硬碟
+      - WATCHTOWER_INCLUDE_RESTARTING=true
+      - TZ=Asia/Taipei
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # 共用 host 的 docker login credential,才能拉 private GHCR image
+      - /home/user/.docker/config.json:/config.json:ro
 
 volumes:
   pg_data:
