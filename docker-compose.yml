@@ -109,7 +109,6 @@ services:
       # - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
       # - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
     volumes:
-      - ./stt_output:/data/output
       # HF_CACHE_DIR: host 上的 HuggingFace model cache,容器內 mount 到 /root/.cache/huggingface
       # 避免每次重啟都重新下載幾 GB 的模型權重
       - ${HF_CACHE_DIR:-./hf_cache}:/root/.cache/huggingface
