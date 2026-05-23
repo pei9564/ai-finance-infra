@@ -17,11 +17,11 @@
 
 <header class="page-header">
   <p class="page-eyebrow">ai-finance-infra · home lab</p>
-  <h1>🌐 AI 驅動的金融知識引擎</h1>
-  <p class="page-lede"><em>4 節點異質 home-lab,從硬體事實反推到每一個架構決策 — 點 ADR 卡片進到可動手調整的互動版。</em></p>
+  <h1>AI 驅動的金融知識引擎</h1>
+  <p class="page-lede">4 節點異質 home-lab,從硬體事實反推到每一個架構決策 — 點 ADR 卡片進到可動手調整的互動版。</p>
 </header>
 
-<h2>🖥️ 硬體基線</h2>
+<h2>硬體基線</h2>
 
 <table>
 <thead>
@@ -30,23 +30,29 @@
 <tbody>
 <tr><td>角色</td><td>GPU worker</td><td>control-plane + stateful</td><td>storage edge</td><td>workstation(不入 cluster)</td></tr>
 <tr><td>CPU</td><td>8C/16T · Intel 11th-gen</td><td>10T · Intel U-series</td><td>4C/8T · Intel 6th-gen</td><td>Apple M3 · 8C</td></tr>
-<tr><td>RAM</td><td>16 GB ⚠️ swap 壓力</td><td><strong>30 GB</strong> ✅</td><td>12 GB</td><td>16 GB</td></tr>
-<tr><td>GPU</td><td><strong>Ampere 4 GB ✅</strong>(cc 8.6)</td><td>Intel iGPU</td><td>Maxwell 2 GB ❌(PyTorch 已停支)</td><td>Apple M3 GPU</td></tr>
+<tr><td>RAM</td><td>16 GB <span class="chip chip--warn">swap 壓力</span></td><td><strong>30 GB</strong></td><td>12 GB</td><td>16 GB</td></tr>
+<tr><td>GPU</td><td><strong>Ampere 4 GB</strong>(cc 8.6)</td><td>Intel iGPU</td><td>Maxwell 2 GB <span class="chip chip--bad">PyTorch 已停支</span></td><td>Apple M3 GPU</td></tr>
 <tr><td>Storage</td><td>NVMe 250 GB</td><td>NVMe 477 GB(63%)</td><td><strong>HDD 931 GB</strong>(冷儲存)</td><td>APFS 460 GB</td></tr>
 </tbody>
 </table>
 
-<h2>🧬 系統架構</h2>
+<h2>系統架構</h2>
 
 <pre class="mermaid">
-graph LR
-    ext["外部金融多媒體<br/>法說會 · podcast · YouTube"] --> scraper["finance-scraper-service<br/>FastAPI + Celery · 無狀態"]
-    scraper -- "FinancialTaskSchema<br/>(Pydantic data contract)" --> redis[("Redis<br/>task queue")]
-    redis --> worker["stt-ai-worker<br/>Whisper · CUDA · 無狀態"]
-    worker --> out["結構化轉錄輸出"]
+flowchart TB
+    ext["外部金融多媒體<br/>法說會 · podcast · YouTube"]
+    scraper["finance-scraper-service<br/>FastAPI + Celery · 無狀態"]
+    redis[("Redis<br/>task queue")]
+    worker["stt-ai-worker<br/>Whisper · CUDA · 無狀態"]
+    out["結構化轉錄輸出"]
+
+    ext --> scraper
+    scraper -- "FinancialTaskSchema" --> redis
+    redis --> worker
+    worker --> out
 </pre>
 
-<h2>⚖️ 架構決策(可動手互動)</h2>
+<h2>架構決策(可動手互動)</h2>
 
 <p>每一個決策都被上面的硬體事實反推出來 — 點卡片進到可拖動約束的互動頁,看推薦如何隨情境翻轉。</p>
 
@@ -66,21 +72,28 @@ graph LR
 <p class="ard-cta"><a href="demos/serving-runtime-decision.html">→ 開啟互動頁</a></p>
 </article>
 
-<article class="ard-card ard-card--ghost">
-<p class="ard-kicker">下一篇 · 草擬中</p>
-<h2 class="ard-title">GitOps:Watchtower → ArgoCD</h2>
-<p class="ard-problem">兩階段 CD 演進的取捨;待 K3s 落地後翻成互動版。</p>
-</article>
-
 </section>
 
-<hr>
+<p class="ard-more">草擬中:GitOps (Watchtower → ArgoCD)、K3s 多節點落位 — 待 K3s 部署完成後翻成互動版。</p>
 
-<p>→ <a href="build-log.md"><strong>📓 工程決策日誌</strong></a> — ADR 是「重」的不可逆決策;日常更小規模的取捨(swap 壓力診斷、health probe、gateway 抽象)走 build log,每天真實發生的紀錄。</p>
-
-<p>→ <a href="adr/"><strong>📁 完整 ADR 列表</strong></a></p>
-
-<p>→ <a href="https://github.com/pei9564/ai-finance-infra"><strong>📦 系統 repo (infra)</strong></a> · <a href="https://github.com/pei9564/finance-scraper-service">scraper</a> · <a href="https://github.com/pei9564/stt-ai-worker">stt</a></p>
+<footer class="page-footer">
+  <div class="footer-col">
+    <h3>文件</h3>
+    <ul>
+      <li><a href="adr/">完整 ADR 列表</a></li>
+      <li><a href="build-log.md">工程決策日誌</a></li>
+    </ul>
+    <p class="footer-note">ADR 是「重」的不可逆決策;日常小規模取捨(swap 壓力診斷、health probe、gateway 抽象)走 build log,每天真實發生的紀錄。</p>
+  </div>
+  <div class="footer-col">
+    <h3>程式碼</h3>
+    <ul>
+      <li><a href="https://github.com/pei9564/ai-finance-infra">ai-finance-infra <span class="footer-note" style="display:inline">(編排層)</span></a></li>
+      <li><a href="https://github.com/pei9564/finance-scraper-service">finance-scraper-service</a></li>
+      <li><a href="https://github.com/pei9564/stt-ai-worker">stt-ai-worker</a></li>
+    </ul>
+  </div>
+</footer>
 
 </article>
 </main>
