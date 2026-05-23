@@ -28,11 +28,11 @@
 <tr><th></th><th>node-a</th><th>node-b</th><th>node-c</th><th>dev-mac</th></tr>
 </thead>
 <tbody>
-<tr><td>角色</td><td>GPU worker</td><td>control-plane + stateful</td><td>storage edge</td><td>workstation(不入 cluster)</td></tr>
+<tr><td>角色</td><td>GPU worker</td><td>control-plane + stateful</td><td>storage edge</td><td>workstation（不入 cluster）</td></tr>
 <tr><td>CPU</td><td>8C/16T · Intel 11th-gen</td><td>10T · Intel U-series</td><td>4C/8T · Intel 6th-gen</td><td>Apple M3 · 8C</td></tr>
 <tr><td>RAM</td><td>16 GB <span class="chip chip--warn">swap 壓力</span></td><td><strong>30 GB</strong></td><td>12 GB</td><td>16 GB</td></tr>
 <tr><td>GPU</td><td><strong>Ampere 4 GB</strong>(cc 8.6)</td><td>Intel iGPU</td><td>Maxwell 2 GB <span class="chip chip--bad">PyTorch 已停支</span></td><td>Apple M3 GPU</td></tr>
-<tr><td>Storage</td><td>NVMe 250 GB</td><td>NVMe 477 GB(63%)</td><td><strong>HDD 931 GB</strong>(冷儲存)</td><td>APFS 460 GB</td></tr>
+<tr><td>Storage</td><td>NVMe 250 GB</td><td>NVMe 477 GB (63%)</td><td><strong>HDD 931 GB</strong>（冷儲存）</td><td>APFS 460 GB</td></tr>
 </tbody>
 </table>
 
@@ -61,7 +61,7 @@ flowchart TB
 <a class="ard-card" data-accent="blue" href="demos/four-node-topology.html">
 <p class="ard-kicker">ADR-001 · 叢集編排</p>
 <h2 class="ard-title">四節點異質 home-lab 拓樸</h2>
-<p class="ard-problem">3 台 laptop + 1 dev workstation，單張可用 GPU、單顆旋轉硬碟 — 約束如何反推每個節點的角色?切換現況 / K3s 看 workload 重新落位。</p>
+<p class="ard-problem">3 台 laptop + 1 dev workstation，單張可用 GPU、單顆旋轉硬碟 — 約束如何反推每個節點的角色？切換現況 / K3s 看 workload 重新落位。</p>
 </a>
 
 <a class="ard-card" data-accent="green" href="demos/serving-runtime-decision.html">
@@ -72,26 +72,19 @@ flowchart TB
 
 </section>
 
-<p class="ard-more">草擬中:GitOps (Watchtower → ArgoCD)、K3s 多節點落位 — 待 K3s 部署完成後翻成互動版。</p>
+<p class="ard-more">草擬中：GitOps (Watchtower → ArgoCD)、K3s 多節點落位 — 待 K3s 部署完成後翻成互動版。</p>
 
 <footer class="page-footer">
-  <div class="footer-col">
-    <h3>文件</h3>
-    <ul>
-      <li><a href="viewer.html?file=adr/adr-001-k3s-selection.md">ADR-001 · K3s 選型</a></li>
-      <li><a href="viewer.html?file=adr/adr-005-local-inference-runtime.md">ADR-005 · 本地推論 Runtime</a></li>
-      <li><a href="viewer.html?file=build-log.md">工程決策日誌</a></li>
-    </ul>
-    <p class="footer-note">ADR 是「重」的不可逆決策;日常小規模取捨(swap 壓力診斷、health probe、gateway 抽象)走 build log，每天真實發生的紀錄。</p>
-  </div>
-  <div class="footer-col">
-    <h3>程式碼</h3>
-    <ul>
-      <li><a href="https://github.com/pei9564/ai-finance-infra">ai-finance-infra <span class="footer-note" style="display:inline">(編排層)</span></a></li>
-      <li><a href="https://github.com/pei9564/finance-scraper-service">finance-scraper-service</a></li>
-      <li><a href="https://github.com/pei9564/stt-ai-worker">stt-ai-worker</a></li>
-    </ul>
-  </div>
+  <p class="footer-row">
+    <span class="footer-label">文件</span>
+    <a href="viewer.html?file=build-log.md">工程決策日誌</a>
+  </p>
+  <p class="footer-row">
+    <span class="footer-label">程式碼</span>
+    <a href="https://github.com/pei9564/ai-finance-infra">ai-finance-infra</a>
+    <a href="https://github.com/pei9564/finance-scraper-service">finance-scraper-service</a>
+    <a href="https://github.com/pei9564/stt-ai-worker">stt-ai-worker</a>
+  </p>
 </footer>
 
 </article>
