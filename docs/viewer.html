@@ -36,7 +36,7 @@
 <body>
 
 <main class="center">
-  <p class="viewer-back"><a href="./">← AI 驅動的金融知識引擎</a></p>
+  <p class="viewer-back"><a href="./">← 回到主頁</a></p>
   <article id="content">Loading…</article>
 </main>
 
@@ -59,7 +59,8 @@
     fetch(file)
       .then(r => r.ok ? r.text() : Promise.reject('HTTP ' + r.status))
       .then(md => {
-        content.innerHTML = marked.parse(md);
+        const stripped = md.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+        content.innerHTML = marked.parse(stripped);
         const h1 = content.querySelector('h1');
         document.title = (h1?.textContent.trim() || file) + ' · ai-finance-infra';
       })
