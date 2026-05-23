@@ -134,11 +134,16 @@ tbody tr:hover { background: var(--highlight); }
   background: var(--light);
   display: flex;
   flex-direction: column;
+  color: var(--darkgray);
+  text-decoration: none;
+  cursor: pointer;
   transition:
     border-color 0.15s ease,
     transform 0.1s ease,
     box-shadow 0.15s ease;
 }
+a.ard-card { color: var(--darkgray); }
+a.ard-card:hover { color: var(--darkgray); }
 .ard-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.08);

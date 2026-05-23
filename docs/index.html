@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI 驅動的金融知識引擎 · ai-finance-infra</title>
-<meta name="description" content="4 節點異質 home-lab,從硬體事實反推到每一個架構決策 — 點 ADR 卡片進到可動手調整的互動版。">
+<meta name="description" content="4 節點異質 home-lab，從硬體事實反推到每一個架構決策 — 點 ADR 卡片進到可動手調整的互動版。">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Schibsted+Grotesk:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -18,7 +18,7 @@
 <header class="page-header">
   <p class="page-eyebrow">ai-finance-infra · home lab</p>
   <h1>AI 驅動的金融知識引擎</h1>
-  <p class="page-lede">4 節點異質 home-lab,從硬體事實反推到每一個架構決策 — 點 ADR 卡片進到可動手調整的互動版。</p>
+  <p class="page-lede">4 節點異質 home-lab，從硬體事實反推到每一個架構決策 — 點 ADR 卡片進到可動手調整的互動版。</p>
 </header>
 
 <h2>硬體基線</h2>
@@ -52,25 +52,23 @@ flowchart TB
     worker --> out
 </pre>
 
-<h2>架構決策(可動手互動)</h2>
+<h2>架構決策</h2>
 
-<p>每一個決策都被上面的硬體事實反推出來 — 點卡片進到可拖動約束的互動頁,看推薦如何隨情境翻轉。</p>
+<p>每一個決策都被上面的硬體事實反推出來 — 點卡片直接進到可拖動約束的互動頁，看推薦如何隨情境翻轉。</p>
 
 <section class="ard-gallery">
 
-<article class="ard-card" data-accent="blue">
+<a class="ard-card" data-accent="blue" href="demos/four-node-topology.html">
 <p class="ard-kicker">ADR-001 · 叢集編排</p>
 <h2 class="ard-title">四節點異質 home-lab 拓樸</h2>
-<p class="ard-problem">3 台 laptop + 1 dev workstation,單張可用 GPU、單顆旋轉硬碟 — 約束如何反推每個節點的角色?切換現況 / K3s 看 workload 重新落位。</p>
-<p class="ard-cta"><a href="demos/four-node-topology.html">→ 開啟互動頁</a></p>
-</article>
+<p class="ard-problem">3 台 laptop + 1 dev workstation，單張可用 GPU、單顆旋轉硬碟 — 約束如何反推每個節點的角色?切換現況 / K3s 看 workload 重新落位。</p>
+</a>
 
-<article class="ard-card" data-accent="green">
+<a class="ard-card" data-accent="green" href="demos/serving-runtime-decision.html">
 <p class="ard-kicker">ADR-005 · 本地推論</p>
 <h2 class="ard-title">vLLM vs Ollama vs llama.cpp</h2>
-<p class="ard-problem">單張 4 GB GPU + 與 Whisper STT 共卡 — 拖一下 VRAM 滑桿,看哪個 serving stack 在約束內活得下來,推薦在哪裡翻轉。</p>
-<p class="ard-cta"><a href="demos/serving-runtime-decision.html">→ 開啟互動頁</a></p>
-</article>
+<p class="ard-problem">單張 4 GB GPU + 與 Whisper STT 共卡 — 拖一下 VRAM 滑桿，看哪個 serving stack 在約束內活得下來，推薦在哪裡翻轉。</p>
+</a>
 
 </section>
 
@@ -84,7 +82,7 @@ flowchart TB
       <li><a href="viewer.html?file=adr/adr-005-local-inference-runtime.md">ADR-005 · 本地推論 Runtime</a></li>
       <li><a href="viewer.html?file=build-log.md">工程決策日誌</a></li>
     </ul>
-    <p class="footer-note">ADR 是「重」的不可逆決策;日常小規模取捨(swap 壓力診斷、health probe、gateway 抽象)走 build log,每天真實發生的紀錄。</p>
+    <p class="footer-note">ADR 是「重」的不可逆決策;日常小規模取捨(swap 壓力診斷、health probe、gateway 抽象)走 build log，每天真實發生的紀錄。</p>
   </div>
   <div class="footer-col">
     <h3>程式碼</h3>
