@@ -2,16 +2,8 @@
 title: "📜 ADR-001:容器編排器選型"
 ---
 
-> [!TIP] **互動版 ↗**
-> 本決策的可動手互動版:<a class="artifact-link" data-href="../static/demos/four-node-topology.html">四節點異質 home-lab 拓樸</a> — 點任一節點看角色分派理據,切換「現況 docker-compose ↔ 目標 K3s」看 workload 如何重新落位。
-
-<script>
-(function () {
-  document.querySelectorAll('.artifact-link[data-href]').forEach(function (a) {
-    a.href = new URL(a.dataset.href, document.baseURI).href;
-  });
-})();
-</script>
+> **TIP · 互動版 ↗**
+> 本決策的可動手互動版:[四節點異質 home-lab 拓樸](demos/four-node-topology.html) — 點任一節點看角色分派理據,切換「現況 docker-compose ↔ 目標 K3s」看 workload 如何重新落位。
 
 # ADR-001:容器編排器選型
 
@@ -21,7 +13,7 @@ title: "📜 ADR-001:容器編排器選型"
 
 ## 1. 背景與面臨挑戰
 
-平台目前是 3 套獨立的 `docker-compose` 堆疊,分別跑在 `node-a`、`node-b`、`node-c` 上(見 [[index|首頁的硬體基線]])。三個痛點驅動我們切換到正式的編排器:
+平台目前是 3 套獨立的 `docker-compose` 堆疊,分別跑在 `node-a`、`node-b`、`node-c` 上(見[首頁的硬體基線](./))。三個痛點驅動我們切換到正式的編排器:
 
 1. **沒有 node affinity。** Whisper worker 必須跑在 `node-a` 上唯一可用的 Ampere GPU;今天靠「人工決定 docker-compose 檔放在哪台 host」來實現。
 2. **沒有資源隔離。** `node-a` 同時跑 Whisper + Postgres + Redis 在 16 GB 上 → 看得見的 swap 壓力,直接拖慢 inference。
@@ -55,7 +47,7 @@ title: "📜 ADR-001:容器編排器選型"
 
 選擇 **Option D:K3s**。
 
-> [!IMPORTANT]
+> **IMPORTANT**
 > **技術理由:** K3s 是唯一同時滿足以下三點的候選:(a) 符合 laptop node 的 RAM 預算、(b) 保留完整 `kubectl` / helm / 標準 manifest 相容、(c) 留住整個 Kubernetes ML/MLOps 生態系的進場機會。Vanilla k8s 的 RAM 開銷會吃進 `node-b` 那 30 GB 我們明確需要留給 Postgres + pgvector 的空間。Swarm 與 Nomad 會把平台跟主流 ML 工具鏈隔開 — 這個策略成本遠大於它們帶來的操作簡潔性。
 
 ## 4. 後續影響

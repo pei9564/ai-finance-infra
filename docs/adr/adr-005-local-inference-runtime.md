@@ -2,16 +2,8 @@
 title: "📜 ADR-005:本地推論的 serving runtime 與模型選型"
 ---
 
-> [!TIP] **互動版 ↗**
-> 本決策的可動手互動版:<a class="artifact-link" data-href="../static/demos/serving-runtime-decision.html">Serving Runtime 選型 — VRAM 模擬器</a> — 拖動 VRAM 滑桿、切換「Whisper 是否共卡」,看 vLLM / Ollama / llama.cpp 哪個裝得下、推薦如何翻轉。
-
-<script>
-(function () {
-  document.querySelectorAll('.artifact-link[data-href]').forEach(function (a) {
-    a.href = new URL(a.dataset.href, document.baseURI).href;
-  });
-})();
-</script>
+> **TIP · 互動版 ↗**
+> 本決策的可動手互動版:[Serving Runtime 選型 — VRAM 模擬器](demos/serving-runtime-decision.html) — 拖動 VRAM 滑桿、切換「Whisper 是否共卡」,看 vLLM / Ollama / llama.cpp 哪個裝得下、推薦如何翻轉。
 
 # ADR-005:本地推論的 serving runtime 與模型選型
 
@@ -23,10 +15,10 @@ title: "📜 ADR-005:本地推論的 serving runtime 與模型選型"
 
 ADR-004(內部草稿)決定把 LLM 推論搬到自架本地模型。本篇接著回答**用哪個 serving stack**。
 
-硬約束(來自 [[index|首頁的硬體基線]]):
+硬約束(來自[首頁的硬體基線](./)):
 
 - `node-a` 只有 **~4 GB VRAM**,且 **Whisper STT 已在佔用同一張卡** — 本地 LLM 必須跟 STT 搶 GPU。
-- 負載特性:**單人 home lab、批次逐則摘要、非即時** — 吞吐量不是首要,能在約束內跑得起來、且接得上 [[build-log|05-15 建立的 gateway 介面]] 才是。
+- 負載特性:**單人 home lab、批次逐則摘要、非即時** — 吞吐量不是首要,能在約束內跑得起來、且接得上 [05-15 建立的 gateway 介面](?file=build-log.md) 才是。
 
 ## 2. 評估候選方案
 
@@ -59,12 +51,12 @@ ADR-004(內部草稿)決定把 LLM 推論搬到自架本地模型。本篇接著
 
 選擇 **Runtime = Option B(Ollama)**;**模型暫定 Qwen2.5-3B-Instruct Q4_K_M**,最終 pick 待實跑驗證。
 
-> [!IMPORTANT]
+> **IMPORTANT**
 > **技術理由:** 4 GB VRAM 且與 STT 共卡這條物理約束,直接淘汰 vLLM(無 CPU offload)。Ollama 與裸 llama.cpp 之間,Ollama 把 llama.cpp 包成 OpenAI-compatible API + 模型管理,**接上既有 gateway 介面是換 endpoint 等級**,而裸 llama.cpp 要自己重做這層。吞吐劣勢在「單人、批次、非即時摘要」的負載下不是瓶頸。模型選 Qwen 是因為下游是繁中金融內容,中文能力 > 英文 benchmark。
 
 ## 4. 後續影響
 
 - **Positive:** 本地推論在 4 GB 上實際可行;接 gateway 成本最低;CPU offload 提供 VRAM 不足時的彈性。
-- **Negative/Risk:** 與 STT 的 GPU 競爭仍在 → 用 **on-demand 啟動(不 ingestion 時 scale 到 0,把 VRAM 還給 Whisper)** + 未來 K3s 拆節點([[adr-001-k3s-selection|ADR-001]])緩解;Q4 量化會掉一些品質。
+- **Negative/Risk:** 與 STT 的 GPU 競爭仍在 → 用 **on-demand 啟動(不 ingestion 時 scale 到 0,把 VRAM 還給 Whisper)** + 未來 K3s 拆節點([ADR-001](?file=adr/adr-001-k3s-selection.md))緩解;Q4 量化會掉一些品質。
 - **量化(實跑後量,翻 🟢 的條件):** tokens/s = `[待量測]`;模型 VRAM 佔用 = `[待量測]`;與 Whisper 並行時的降速 = `[待量測]`;Qwen-3B-Q4 摘要品質相對原後端 = `[待量測]`。
-- **連動決策:** 為什麼要本地見 ADR-004(內部草稿);GPU 競爭的根本解見 [[adr-001-k3s-selection|ADR-001]]。
+- **連動決策:** 為什麼要本地見 ADR-004(內部草稿);GPU 競爭的根本解見 [ADR-001](?file=adr/adr-001-k3s-selection.md)。
