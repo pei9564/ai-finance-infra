@@ -8,6 +8,9 @@ title: "📓 工程決策日誌"
 
 ---
 
+### 2026-05-23 · 環境隔離策略定案：單 cluster + namespace 🟡 Proposed
+K3s 落地前先把 test / prod 切分方式拍板：單一 cluster + `finance-prod` / `finance-test` namespace，靠 ResourceQuota + NetworkPolicy + image tag 鎖 digest 撐起邏輯隔離；同一 PG 起兩個 database，不開第二個 instance。完整理據 + GPU 排他 / etcd 共享的取捨見 [ADR-006](?file=adr/adr-006-environment-isolation.md)。
+
 ### 2026-05-21 · K3s 遷移前置：health/ready 探針 + CI 測試門檻 🚧 In progress
 scraper 加 health/ready endpoint、CI 補上跑測試 stage（`534aece`）；同期用 pydantic 鎖外部資料邊界（`c486982`）。
 
