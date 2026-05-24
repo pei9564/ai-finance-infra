@@ -2,7 +2,7 @@
 
 > Home lab 上跑的 AI 金融知識引擎 — 編排層。法說會 / podcast / YouTube 等金融多媒體 → STT → LLM 摘要 → 結構化資料層,所有架構決策都從硬體約束反推。
 
-這個 repo **本身不寫業務邏輯**,職責是用 `docker-compose` 把幾個獨立服務、共享資料層、自動部署機制接在一起,並當作整套系統的文件 hub。
+這個 repo **本身不寫業務邏輯**,職責是用 Kubernetes (K3s) 把幾個獨立服務、共享資料層接在一起,並當作整套系統的文件 hub。原有的 `docker-compose` 則退居本地開發與快速測試用。
 
 <!-- 📖 **完整架構敘事、ADR、互動 demo:** [pei9564.github.io/ai-finance-infra](https://pei9564.github.io/ai-finance-infra/) -->
 
@@ -32,15 +32,14 @@ Pipeline:`collect → STT → translate → summarize`。scraper 是 IO 為主,S
 
 ```mermaid
 flowchart TB
-    subgraph host["host (single node, docker-compose)"]
-        subgraph compose["docker-compose network"]
-            scraper["finance-scraper-service<br/>(FastAPI, :8080)"]
-            stt["stt-ai-worker<br/>(FastAPI, :8000, GPU)"]
-            pg[("PostgreSQL<br/>:5432")]
-            redis[("Redis<br/>:6379")]
-            watchtower["watchtower<br/>(GHCR poller)"]
+    subgraph host["host (single node, K3s Cluster)"]
+        subgraph k8s["finance namespace"]
+            scraper["finance-scraper-service<br/>(Deployment, svc:8080)"]
+            stt["stt-ai-worker<br/>(Deployment, GPU, svc:8000)"]
+            pg[("PostgreSQL<br/>(StatefulSet, svc:5432)")]
+            redis[("Redis<br/>(Deployment, svc:6379)")]
         end
-        vllm["vLLM gateway<br/>(host process, :8000)"]
+        vllm["vLLM gateway<br/>(External Service / host process)"]
     end
 
     scraper -- "PG_DSN" --> pg
@@ -128,11 +127,13 @@ DB / Redis **沒貼 label**,不會被動;要 pin 版本就把 `.env` 的 image t
 
 | 階段 | 狀態 | 描述 |
 |---|---|---|
-| 單機 docker-compose | 🟢 Running | 本 repo 目前狀態，也作為本地開發環境保留 |
-| 單節點 K3s | 🟡 Ready | `k8s/` 目錄已備 manifests，可在同一台機器上部署 |
+| 單節點 K3s | 🟢 Running | **目前的正式運行環境**，資源控管與 GPU 分配更精準 |
+| 單機 docker-compose | 🟡 Dev-only | 退役並轉為本地開發用，保留 `docker-compose.yml` |
 | 多節點 K3s on home lab | ⚪ Planned | 其餘節點就緒後以 `k3s agent` 加入叢集 |
 
 ### K3s 部署 (單節點)
+
+> **完整教學與踩坑紀錄請參考：[docs/k3s-setup-draft.md](docs/k3s-setup-draft.md)**
 
 ```bash
 # 1. 安裝 K3s
