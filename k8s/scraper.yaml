@@ -8,12 +8,20 @@ metadata:
   name: scraper-config
   namespace: finance
 data:
-  # 非機敏的 application 設定
-  VLLM_BASE_URL: "http://vllm-gateway:8000/v1"
+  # ── LLM Gateway ──────────────────────────────────────────────
+  # LLMGatewayClient 走 OpenAI 相容 API，下面兩組擇一：
+  #
+  # 選項 A：Google Gemini (OpenAI 相容端點，不需本地 GPU)
+  VLLM_BASE_URL: "https://generativelanguage.googleapis.com/v1beta/openai"
+  VLLM_MODEL: "gemini-2.5-flash"
+  #
+  # 選項 B：本地 vLLM gateway (需要 Host 上跑 vLLM)
+  # VLLM_BASE_URL: "http://vllm-gateway:8000/v1"
+  # VLLM_MODEL: ""                   # 留空自動偵測
+  #
+  # ── 其他設定 ─────────────────────────────────────────────────
   STT_BASE_URL: "http://stt-ai-worker:8000"
   LOOKBACK_DAYS: "7"
-  # VLLM_MODEL: ""
-  # VLLM_API_KEY: ""
 
 ---
 apiVersion: v1
@@ -78,6 +86,11 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: GITHUB_TOKEN
+            - name: VLLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: VLLM_API_KEY
           readinessProbe:
             httpGet:
               path: /docs
