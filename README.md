@@ -1,10 +1,10 @@
 # ai-finance-infra
 
-> 4 節點 home lab 上跑的 AI 金融知識引擎 — 編排層。法說會 / podcast / YouTube 等金融多媒體 → STT → LLM 摘要 → 結構化資料層,所有架構決策都從硬體約束反推。
+> Home lab 上跑的 AI 金融知識引擎 — 編排層。法說會 / podcast / YouTube 等金融多媒體 → STT → LLM 摘要 → 結構化資料層,所有架構決策都從硬體約束反推。
 
 這個 repo **本身不寫業務邏輯**,職責是用 `docker-compose` 把幾個獨立服務、共享資料層、自動部署機制接在一起,並當作整套系統的文件 hub。
 
-📖 **完整架構敘事、ADR、互動 demo:** [pei9564.github.io/ai-finance-infra](https://pei9564.github.io/ai-finance-infra/)
+<!-- 📖 **完整架構敘事、ADR、互動 demo:** [pei9564.github.io/ai-finance-infra](https://pei9564.github.io/ai-finance-infra/) -->
 
 ---
 
@@ -23,7 +23,8 @@ Pipeline:`collect → STT → translate → summarize`。scraper 是 IO 為主,S
 切成 3 repo 的理由:
 - **執行特性差異** — scraper IO 重 (API + httpx + DB),STT GPU 重 (VRAM ~6 GB),image 大小、scaling 策略、CI 都不同
 - **infra 是黏著層** — 改部署不用動業務 code,反之亦然
-- **infra repo 同時當 hub** — `docs/` 放跨專案 narrative、ADR、4 節點落位互動 demo,進站先看這裡再選擇深入哪個 repo
+- **infra repo 作為編排核心** — 集中管理架構設定與部署配置
+<!-- - **infra repo 同時當 hub** — `docs/` 放跨專案 narrative、ADR、4 節點落位互動 demo,進站先看這裡再選擇深入哪個 repo -->
 
 ---
 
@@ -74,7 +75,7 @@ flowchart TB
 
 ## 部署
 
-> Image 走私有 registry (目前 GHCR private,規劃遷移自架 Harbor)。完整跑起來需要 pull credential;只想看架構讀本檔 + `docker-compose.yml` + `docs/` 即可。
+> Image 目前置於 GHCR。完整跑起來需要相對應的環境變數與 credential；若只需了解架構，閱讀本 README 與 `docker-compose.yml` 即可。
 
 前置:
 - Docker + Docker Compose v2
@@ -128,12 +129,14 @@ DB / Redis **沒貼 label**,不會被動;要 pin 版本就把 `.env` 的 image t
 | 階段 | 狀態 | 描述 |
 |---|---|---|
 | 單機 docker-compose | 🟢 Running | 本 repo 目前狀態 |
-| 多節點 K3s on home lab | 🟡 Proposed | 4 節點 lab,manifests 預計放 `k8s/`,health/ready 探針已備 |
+| 多節點 K3s on home lab | 🟡 Proposed | 多節點 lab,manifests 預計放 `k8s/`,health/ready 探針已備 |
 
-K3s 落地後 docker-compose 仍保留作為本地開發環境。實際 4 節點落位看 [ADR-001 互動 demo](https://pei9564.github.io/ai-finance-infra/demos/four-node-topology.html)。
+K3s 落地後 docker-compose 仍保留作為本地開發環境。
+<!-- 實際 4 節點落位看 [ADR-001 互動 demo](https://pei9564.github.io/ai-finance-infra/demos/four-node-topology.html)。 -->
 
 ---
 
+<!-- 
 ## 文件
 
 `docs/` 是純靜態 HTML/CSS/JS,GitHub Pages 直接從 `docs/` 部署,無 build step:
@@ -146,3 +149,4 @@ K3s 落地後 docker-compose 仍保留作為本地開發環境。實際 4 節點
 | [ADR-005 · 本地推論 runtime 選型](https://pei9564.github.io/ai-finance-infra/demos/serving-runtime-decision.html) | 互動 demo (vLLM vs Ollama vs llama.cpp) |
 
 原 [`ai-infra-portfolio`](https://github.com/pei9564/ai-infra-portfolio) (Quartz 站) 已退役,內容遷至本 repo `docs/`。
+-->
