@@ -13,5 +13,9 @@ services:
       # mount sibling repo 的 config 覆寫 image 內建 yaml,改設定不用 rebuild
       - ../finance-scraper-service/config:/app/config:ro
 
-  # stt-ai-worker 目前 image 沒有 mount-friendly config (設定都在 env var),
-  # 若未來有要 hot-edit 的檔案再加在這裡。
+  stt-ai-worker:
+    volumes:
+      # mount sibling repo 的 app/ 進去,改 Python 即時生效 (搭配下面 --reload)
+      - ../stt-ai-worker/app:/app/app
+    # 覆寫 image CMD,開 uvicorn --reload watch /app/app
+    command: ["uvicorn", "app.asgi:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
