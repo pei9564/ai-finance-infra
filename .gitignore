@@ -6,3 +6,9 @@ k8s/secrets.yaml
 # 容器執行時產生的 STT 輸出與本地 HF cache
 stt_output/
 hf_cache/
+
+# Database backups
+*.dump
+
+# Local admin configs
+k8s/dashboard-admin.yaml
