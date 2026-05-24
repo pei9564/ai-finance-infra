@@ -14,7 +14,7 @@
 
 | Repo | 角色 | 語言/技術 |
 |---|---|---|
-| **ai-finance-infra** (本 repo) | 編排層 — docker-compose、共享 PG/Redis、watchtower 自動部署、`docs/` portfolio site | Docker Compose / Static HTML |
+| **ai-finance-infra** (本 repo) | 編排層 — docker-compose / K3s manifests、共享 PG/Redis、自動部署機制 | Docker Compose / K8s YAML |
 | [`finance-scraper-service`](https://github.com/pei9564/finance-scraper-service) | 收外部來源 → 經 LLM gateway 翻譯/摘要 → 寫入 PG | Python / FastAPI |
 | [`stt-ai-worker`](https://github.com/pei9564/stt-ai-worker) | 音訊轉逐字稿 (Podcast / YouTube),faster-whisper GPU 推論 | Python / FastAPI |
 
@@ -128,11 +128,52 @@ DB / Redis **沒貼 label**,不會被動;要 pin 版本就把 `.env` 的 image t
 
 | 階段 | 狀態 | 描述 |
 |---|---|---|
-| 單機 docker-compose | 🟢 Running | 本 repo 目前狀態 |
-| 多節點 K3s on home lab | 🟡 Proposed | 多節點 lab,manifests 預計放 `k8s/`,health/ready 探針已備 |
+| 單機 docker-compose | 🟢 Running | 本 repo 目前狀態，也作為本地開發環境保留 |
+| 單節點 K3s | 🟡 Ready | `k8s/` 目錄已備 manifests，可在同一台機器上部署 |
+| 多節點 K3s on home lab | ⚪ Planned | 其餘節點就緒後以 `k3s agent` 加入叢集 |
+
+### K3s 部署 (單節點)
+
+```bash
+# 1. 安裝 K3s
+curl -sfL https://get.k3s.io | sh -
+
+# 2. 安裝 NVIDIA device plugin (GPU 節點需要)
+sudo k3s kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.17.0/deployments/static/nvidia-device-plugin.yml
+
+# 3. 建立 namespace + secrets
+sudo k3s kubectl apply -f k8s/namespace.yaml
+cp k8s/secrets.yaml.example k8s/secrets.yaml   # 填入真實值
+sudo k3s kubectl apply -f k8s/secrets.yaml
+sudo k3s kubectl create secret docker-registry ghcr-cred \
+  --docker-server=ghcr.io --docker-username=pei9564 \
+  --docker-password=<GHCR_PAT> -n finance
+
+# 4. 部署基礎設施
+sudo k3s kubectl apply -f k8s/postgres.yaml
+sudo k3s kubectl apply -f k8s/redis.yaml
+sudo k3s kubectl apply -f k8s/vllm-external.yaml   # 記得改 Host IP
+
+# 5. (可選) 從 Docker Compose 遷移 PG 資料
+docker compose exec postgres pg_dump -U admin -d finance_db -Fc -f /tmp/dump.sql
+docker compose cp postgres:/tmp/dump.sql ./finance_db.dump
+sudo k3s kubectl wait --for=condition=ready pod -l app=postgres -n finance --timeout=60s
+sudo k3s kubectl cp ./finance_db.dump finance/postgres-0:/tmp/dump.sql
+sudo k3s kubectl exec -n finance postgres-0 -- pg_restore -U admin -d finance_db --clean --if-exists /tmp/dump.sql
+
+# 6. 部署應用
+sudo k3s kubectl apply -f k8s/scraper.yaml
+sudo k3s kubectl apply -f k8s/stt.yaml
+
+# 7. 驗證
+sudo k3s kubectl get pods -n finance
+
+# 8. Port forward 測試
+sudo k3s kubectl port-forward svc/finance-scraper-service 8080:8080 -n finance
+sudo k3s kubectl port-forward svc/stt-ai-worker 8001:8000 -n finance
+```
 
 K3s 落地後 docker-compose 仍保留作為本地開發環境。
-<!-- 實際 4 節點落位看 [ADR-001 互動 demo](https://pei9564.github.io/ai-finance-infra/demos/four-node-topology.html)。 -->
 
 ---
 

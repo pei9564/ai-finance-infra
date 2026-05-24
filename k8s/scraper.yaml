@@ -1,0 +1,92 @@
+# finance-scraper-service — Deployment + Service + ConfigMap
+# 無狀態服務，從 GHCR 拉 private image。
+# 連線字串透過 env 組裝，K8s 內部 DNS 取代 docker-compose 的 service name。
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scraper-config
+  namespace: finance
+data:
+  # 非機敏的 application 設定
+  VLLM_BASE_URL: "http://vllm-gateway:8000/v1"
+  STT_BASE_URL: "http://stt-ai-worker:8000"
+  LOOKBACK_DAYS: "7"
+  # VLLM_MODEL: ""
+  # VLLM_API_KEY: ""
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: finance-scraper-service
+  namespace: finance
+spec:
+  ports:
+    - port: 8080
+  selector:
+    app: scraper
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finance-scraper-service
+  namespace: finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: scraper
+  template:
+    metadata:
+      labels:
+        app: scraper
+    spec:
+      imagePullSecrets:
+        - name: ghcr-cred
+      containers:
+        - name: scraper
+          image: ghcr.io/pei9564/finance-scraper-service:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: scraper-config
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: POSTGRES_DB
+            - name: PG_DSN
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: GITHUB_TOKEN
+          readinessProbe:
+            httpGet:
+              path: /docs
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi

@@ -1,0 +1,29 @@
+# vLLM Gateway — 外部服務代理
+# vLLM 跑在 Host 上 (不在 K3s 內)，透過手動 Endpoints 讓叢集內的 Pod
+# 可以用 http://vllm-gateway:8000/v1 連到 Host 上的 vLLM。
+#
+# ⚠️ 請把下面的 IP 改成你 Host 的內網 IP (例如 192.168.x.x)
+#    查詢方式: ip addr show | grep "inet " | grep -v 127.0.0.1
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-gateway
+  namespace: finance
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: vllm-gateway
+  namespace: finance
+subsets:
+  - addresses:
+      - ip: "192.0.2.11"    # ← 改成你 Host 的實際內網 IP
+    ports:
+      - port: 8000

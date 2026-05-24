@@ -1,5 +1,8 @@
 .env
 
+# K8s secrets (真實值不進 repo，用 secrets.yaml.example 當範本)
+k8s/secrets.yaml
+
 # 容器執行時產生的 STT 輸出與本地 HF cache
 stt_output/
 hf_cache/

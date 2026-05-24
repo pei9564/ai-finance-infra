@@ -1,0 +1,88 @@
+# stt-ai-worker — Deployment + Service + ConfigMap + GPU
+# GPU 推論服務，需要 NVIDIA device plugin。
+# HuggingFace model cache 用 hostPath 避免每次 Pod 重啟都重下載權重。
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stt-config
+  namespace: finance
+data:
+  MODEL: "medium"
+  DEVICE: "cuda"
+  COMPUTE_TYPE: "int8"
+  BATCH_SIZE: "4"
+  LANGUAGE: "zh"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stt-ai-worker
+  namespace: finance
+spec:
+  ports:
+    - port: 8000
+  selector:
+    app: stt
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stt-ai-worker
+  namespace: finance
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: stt
+  template:
+    metadata:
+      labels:
+        app: stt
+    spec:
+      imagePullSecrets:
+        - name: ghcr-cred
+      containers:
+        - name: stt
+          image: ghcr.io/pei9564/stt-ai-worker:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: stt-config
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: POSTGRES_DB
+            - name: DB_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
+            - name: REDIS_URL
+              value: "redis://redis:6379/0"
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+          resources:
+            limits:
+              nvidia.com/gpu: 1           # 請求 1 張 GPU
+            requests:
+              cpu: 100m
+              memory: 512Mi
+      volumes:
+        - name: hf-cache
+          hostPath:
+            path: /opt/hf-cache           # Host 上的固定路徑，避免重下載模型
+            type: DirectoryOrCreate
