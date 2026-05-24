@@ -1,25 +1,29 @@
 # ai-finance-infra
 
-> 自架 AI 知識引擎的編排層 — 把 GitHub releases / arXiv / Podcast 等技術內容自動收進統一資料層,給後續 LLM 摘要與檢索使用。
+> 4 節點 home lab 上跑的 AI 金融知識引擎 — 編排層。法說會 / podcast / YouTube 等金融多媒體 → STT → LLM 摘要 → 結構化資料層,所有架構決策都從硬體約束反推。
 
-這個 repo **本身不寫業務邏輯**,職責是用 `docker-compose` 把幾個獨立服務、共享的資料層、自動部署機制接在一起,跑在 home lab 上。
+這個 repo **本身不寫業務邏輯**,職責是用 `docker-compose` 把幾個獨立服務、共享資料層、自動部署機制接在一起,並當作整套系統的文件 hub。
+
+📖 **完整架構敘事、ADR、互動 demo:** [pei9564.github.io/ai-finance-infra](https://pei9564.github.io/ai-finance-infra/)
 
 ---
 
 ## 系統定位
 
-整個系統由 3 個 repo 組成,各司其職:
+3 個 repo 各司其職:
 
 | Repo | 角色 | 語言/技術 |
 |---|---|---|
-| **ai-finance-infra** (本 repo) | 編排層 — docker-compose、共享 PG/Redis、watchtower 自動部署、系統文件 (`docs/`) | Docker Compose / Static HTML |
-| [`finance-scraper-service`](https://github.com/pei9564/finance-scraper-service) | 從 GitHub releases / arXiv / HackerNews / RSS 收 AI infra 技術情報,vLLM 做中文摘要 | Python / FastAPI |
-| [`stt-ai-worker`](https://github.com/pei9564/stt-ai-worker) | 語音內容 (Podcast / YouTube) 轉逐字稿,faster-whisper GPU 推論 | Python / FastAPI |
+| **ai-finance-infra** (本 repo) | 編排層 — docker-compose、共享 PG/Redis、watchtower 自動部署、`docs/` portfolio site | Docker Compose / Static HTML |
+| [`finance-scraper-service`](https://github.com/pei9564/finance-scraper-service) | 收外部來源 → 經 LLM gateway 翻譯/摘要 → 寫入 PG | Python / FastAPI |
+| [`stt-ai-worker`](https://github.com/pei9564/stt-ai-worker) | 音訊轉逐字稿 (Podcast / YouTube),faster-whisper GPU 推論 | Python / FastAPI |
 
-切成 3 個 repo 的理由:
-- **執行特性差異** — scraper 是 IO 重(API + httpx + DB),stt 是 GPU 重(VRAM ~6GB),image 大小、scaling 策略、CI/CD 都不同
+Pipeline:`collect → STT → translate → summarize`。scraper 是 IO 為主,STT 是 GPU 為主,Redis 串接兩條管線,PG 是唯一資料交會點。
+
+切成 3 repo 的理由:
+- **執行特性差異** — scraper IO 重 (API + httpx + DB),STT GPU 重 (VRAM ~6 GB),image 大小、scaling 策略、CI 都不同
 - **infra 是黏著層** — 改部署不用動業務 code,反之亦然
-- **infra repo 同時當 hub** — `docs/` 放跨專案 narrative、ADR、拓樸圖,讀者進站先看這裡再選擇深入哪個 repo
+- **infra repo 同時當 hub** — `docs/` 放跨專案 narrative、ADR、4 節點落位互動 demo,進站先看這裡再選擇深入哪個 repo
 
 ---
 
@@ -27,7 +31,7 @@
 
 ```mermaid
 flowchart TB
-    subgraph host["Host (single node, docker-compose)"]
+    subgraph host["host (single node, docker-compose)"]
         subgraph compose["docker-compose network"]
             scraper["finance-scraper-service<br/>(FastAPI, :8080)"]
             stt["stt-ai-worker<br/>(FastAPI, :8000, GPU)"]
@@ -43,22 +47,21 @@ flowchart TB
     scraper -- "REDIS_URL" --> redis
     stt -- "REDIS_URL" --> redis
     scraper -- "VLLM_BASE_URL<br/>(host.docker.internal)" --> vllm
-    scraper -- "STT_BASE_URL<br/>(內部 DNS)" --> stt
+    scraper -- "STT_BASE_URL<br/>(internal DNS)" --> stt
     watchtower -. "poll + pull + restart" .-> scraper
     watchtower -. "poll + pull + restart" .-> stt
 ```
 
-**關鍵設計選擇:**
-
+關鍵設計選擇:
 - **PG / Redis 不貼 watchtower label** — 自動更新只動 scraper/stt 的 application image,stateful 服務手動升級
-- **vLLM 跑在 host 而非 compose 內** — GPU 直通效率,且 vLLM 模型大,跨 service 重啟成本高;`host.docker.internal` 從容器連回 host
-- **stt 與 scraper 互不依賴** — 兩條 ingestion pipeline 各自獨立,PG 是唯一交會點
+- **vLLM 跑在 host 而非 compose 內** — GPU 直通效率較高、模型權重重啟成本大;`host.docker.internal` 從容器連回 host
+- **scraper 與 STT 不直接耦合** — 兩條 pipeline 各自獨立,PG 是唯一交會點
 
 ---
 
 ## Port 對應
 
-主機上同時有其他專案在跑,所有 port 都做了避讓:
+主機同時跑其他專案,host port 全部避讓:
 
 | Service | 容器內 | Host | 避讓對象 |
 |---|---|---|---|
@@ -71,81 +74,75 @@ flowchart TB
 
 ## 部署
 
-> 本系統 image 走私有 registry (目前 GHCR private,規劃遷移至自架 Harbor)。
-> 完整跑起來需要 image pull credential。若只想檢視架構,看本檔 + `docker-compose.yml` + `docs/` 即可。
+> Image 走私有 registry (目前 GHCR private,規劃遷移自架 Harbor)。完整跑起來需要 pull credential;只想看架構讀本檔 + `docker-compose.yml` + `docs/` 即可。
 
-需要前置:
+前置:
 - Docker + Docker Compose v2
-- (選用) NVIDIA Container Toolkit — 若 STT 走 `STT_DEVICE=cuda`
-- 已 `docker login ghcr.io` (拉 private image 必要)
+- NVIDIA Container Toolkit (若 STT 走 `STT_DEVICE=cuda`)
+- `docker login ghcr.io` (拉 private image 必要)
 
 ```bash
 # 1. 設定環境變數 (整套系統的單一設定來源)
 cp .env.example .env
-# 編輯 .env: 至少要填 POSTGRES_PASSWORD 與 GITHUB_TOKEN
+# 至少要填 POSTGRES_PASSWORD 與 GITHUB_TOKEN
 
 # 2. 登入 registry 拉 private image
 echo $GHCR_PAT | docker login ghcr.io -u <username> --password-stdin
 
 # 3. 起整套
 docker compose up -d
-
-# 4. 確認
 docker compose ps
 ```
 
 驗證點:
-- `http://localhost:8080` — scraper UI / API
 - `http://localhost:8080/docs` — scraper OpenAPI
 - `http://localhost:8001` — STT UI
 - `docker compose logs watchtower` — 30 秒 poll 一次 GHCR
 
-## 本地開發
+### 本地開發 (sibling repo hot-edit)
 
-若同時 clone 了 `finance-scraper-service` / `stt-ai-worker` 到 sibling 路徑,
-想 hot-edit scraper 的 YAML config 不 rebuild image,套上 dev override:
+同時 clone `finance-scraper-service` / `stt-ai-worker` 到 sibling 路徑時,套上 dev override 可以 mount scraper config 進去免 rebuild:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
-dev override 做的事:
-- mount `../finance-scraper-service/config:/app/config:ro` 覆寫 image 內建 yaml
-
-純 image 部署 (production / try-it-out) 不要套這份,只跑 `docker-compose.yml` 即可。
+純 image 部署 (production / try-it-out) 不要套這份。
 
 ---
 
 ## 自動部署 (watchtower)
 
-scraper 與 stt 兩個 service 都貼了 `com.centurylinklabs.watchtower.enable=true` label。流程:
+scraper 與 stt 兩個 service 貼了 `com.centurylinklabs.watchtower.enable=true` label。流程:
 
-1. CI (兩個 application repo 各自的 GitHub Actions) build image → push `:latest` 到 GHCR
+1. 兩個 application repo 各自 CI build image → push `:latest` 到 GHCR
 2. watchtower 每 30 秒問 GHCR 一次有沒有新 digest
 3. 有 → `docker pull` → 重啟對應 container → 清舊 image
 
-DB / Redis **沒貼 label**,不會被動;若想 pin 版本,把 `.env` 的 image tag 從 `:latest` 改成 `:sha-xxxxxxx`,watchtower 不會升 (因為 tag 不變)。
+DB / Redis **沒貼 label**,不會被動;要 pin 版本就把 `.env` 的 image tag 從 `:latest` 改成 `:sha-xxxxxxx`,watchtower 不會升 (因為 tag 不變)。
 
 ---
 
-## 部署模式
+## 部署演進
 
 | 階段 | 狀態 | 描述 |
 |---|---|---|
-| 單機 docker-compose | 🟢 Running | 目前在 dev 環境跑(本 repo) |
-| 多節點 K3s on home lab | 🟡 Proposed | 4-node 家庭 lab,K3s manifests 預計放 `k8s/`,規劃中 |
+| 單機 docker-compose | 🟢 Running | 本 repo 目前狀態 |
+| 多節點 K3s on home lab | 🟡 Proposed | 4 節點 lab,manifests 預計放 `k8s/`,health/ready 探針已備 |
 
-K3s 部署完成後會把 manifests 與 GitOps 設定加進來,屆時 docker-compose 仍保留作為本地開發環境。
+K3s 落地後 docker-compose 仍保留作為本地開發環境。實際 4 節點落位看 [ADR-001 互動 demo](https://pei9564.github.io/ai-finance-infra/demos/four-node-topology.html)。
 
 ---
 
-## 相關文件
+## 文件
 
-完整架構決策記錄、ADR、互動式 artifact 由 `docs/` 提供,透過 GitHub Pages 發佈於 [pei9564.github.io/ai-finance-infra](https://pei9564.github.io/ai-finance-infra/)。
+`docs/` 是純靜態 HTML/CSS/JS,GitHub Pages 直接從 `docs/` 部署,無 build step:
 
-`docs/` 是純靜態 HTML/CSS/JS,無 build step:
-- `index.html` — landing page,硬體基線 + 系統架構圖 + ADR 卡片
-- `demos/*.html` — 可拖動約束的互動式 artifact (vanilla JS)
-- `adr/*.md` — ADR 全文 (由 GitHub 直接渲染)
+| 入口 | 內容 |
+|---|---|
+| [Landing](https://pei9564.github.io/ai-finance-infra/) | 硬體基線 + 系統架構圖 + ADR 卡片 |
+| [Build log](https://pei9564.github.io/ai-finance-infra/viewer.html?file=build-log.md) | 每天工程決策日誌 |
+| [ADR-001 · 4 節點落位](https://pei9564.github.io/ai-finance-infra/demos/four-node-topology.html) | 互動 demo (docker-compose ↔ K3s 切換) |
+| [ADR-005 · 本地推論 runtime 選型](https://pei9564.github.io/ai-finance-infra/demos/serving-runtime-decision.html) | 互動 demo (vLLM vs Ollama vs llama.cpp) |
 
-原先位於獨立 repo [`ai-infra-portfolio`](https://github.com/pei9564/ai-infra-portfolio) 的 Quartz 站已退役,內容遷至本 repo `docs/`。
+原 [`ai-infra-portfolio`](https://github.com/pei9564/ai-infra-portfolio) (Quartz 站) 已退役,內容遷至本 repo `docs/`。
