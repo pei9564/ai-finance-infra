@@ -54,6 +54,9 @@ services:
       - VLLM_MODEL=${VLLM_MODEL:-}
       - VLLM_API_KEY=${VLLM_API_KEY:-}
       - LOOKBACK_DAYS=${LOOKBACK_DAYS:-7}
+      - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-120}
+      - STT_TIMEOUT_SECONDS=${STT_TIMEOUT_SECONDS:-7200}
+      - MAX_STT_SUBMISSIONS=${MAX_STT_SUBMISSIONS:-20}
     extra_hosts:
       - "host.docker.internal:host-gateway"  # Linux 上讓容器能用 host.docker.internal 連回 host
     depends_on:
@@ -77,6 +80,15 @@ services:
       - COMPUTE_TYPE=${STT_COMPUTE_TYPE:-int8}        # int8 / float16 (GPU 用 int8 省 VRAM)
       - BATCH_SIZE=${STT_BATCH_SIZE:-4}               # 1 不批次最省電 / 4 平衡 / 8 最快
       - LANGUAGE=${STT_LANGUAGE:-zh}                  # 留空=自動偵測; zh / en
+      - MAX_UPLOAD_BYTES=${MAX_UPLOAD_BYTES:-536870912}
+      - MAX_DOWNLOAD_BYTES=${MAX_DOWNLOAD_BYTES:-536870912}
+      - MAX_AUDIO_SECONDS=${MAX_AUDIO_SECONDS:-7200}
+      - MAX_PENDING_JOBS=${MAX_PENDING_JOBS:-20}
+      - MAX_FEED_EPISODES=${MAX_FEED_EPISODES:-20}
+      - MAX_BATCH_SIZE=${MAX_BATCH_SIZE:-16}
+      - MAX_JOB_SECONDS=${MAX_JOB_SECONDS:-7200}
+      - DOWNLOAD_TIMEOUT_SECONDS=${DOWNLOAD_TIMEOUT_SECONDS:-600}
+      - MIN_FREE_DISK_BYTES=${MIN_FREE_DISK_BYTES:-536870912}
     volumes:
       # HF_CACHE_DIR: host 上的 HuggingFace model cache,容器內 mount 到 /root/.cache/huggingface
       # 避免每次重啟都重新下載幾 GB 的模型權重
