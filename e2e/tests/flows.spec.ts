@@ -68,6 +68,13 @@ test('input validation and file upload survive browser reload', async ({ page, r
   await expect(page.locator('#result')).toHaveValue(transcript);
   const persisted = await (await request.get(`/job/${id}`)).json();
   expect(persisted.transcript_id).toBeGreaterThan(0);
+  const download = page.waitForEvent('download');
+  await row.getByRole('link', { name: 'JSON', exact: true }).click();
+  expect((await download).suggestedFilename()).toBe('transcript.json');
+  const exported = await (await request.get(`/job/${id}/export`)).json();
+  expect(exported.text).toBe(transcript);
+  expect(exported.provenance.source).not.toHaveProperty('path');
+  expect(exported.provenance.model_profile).toContain('fixture');
 });
 
 test('URL and RSS submissions produce transcripts through real APIs', async ({ page }) => {
@@ -88,7 +95,7 @@ test('URL and RSS submissions produce transcripts through real APIs', async ({ p
 test('failed upload retains its audio and retries from the jobs UI', async ({ page, request }) => {
   await page.goto('/');
   await upload(page, 'fail-once', 'Retry earnings');
-  await expect(page.locator('#status')).toContainText('Fixture temporary inference failure');
+  await expect(page.locator('#status')).toContainText('任務處理失敗');
   expect((await state(request)).uploads).toBe(1);
   await page.locator('[data-tab="jobs"]').click();
   const row = page.locator('.jobrow').filter({ hasText: 'Retry earnings' });
@@ -146,6 +153,11 @@ test('scraper media flows through STT, translation, summary, bookmark and deleti
   await expect(page.locator('.card-title')).toContainText('測試財報');
   await page.locator('button[data-stage="summarize"]').click();
   await expect(page.locator('#daily-view .card-summary')).toHaveText(summary);
+  const exported = await (await request.get(`${scraper}/api/events/e2e-media/export`)).json();
+  expect(exported.processing.original_body).toBe(transcript);
+  expect(exported.processing.translation.method).toBe('llm');
+  expect(exported.processing.summary.input_truncated).toBe(false);
+  expect(exported.processing.stt.job_id).toBeTruthy();
   await page.locator('#daily-view .bookmark-btn').click();
   await expect(page.locator('#daily-view .bookmark-btn')).toHaveClass(/on/);
   await page.reload();
@@ -161,4 +173,20 @@ test('scraper media flows through STT, translation, summary, bookmark and deleti
   await expect(page.locator('#feed-content .card')).toHaveCount(0);
   const bookmarks = await (await request.get(`${scraper}/api/bookmarks/uids`)).json();
   expect(bookmarks).toEqual({ uids: [] });
+});
+
+
+test('duplicate upload reuses completed transcript and exposes diagnostics', async ({ page, request }) => {
+  await page.goto('/');
+  const first = await upload(page, 'same-content', 'Duplicate earnings');
+  await expect(page.locator('#result')).toHaveValue(transcript);
+  const second = await upload(page, 'same-content', 'Duplicate earnings');
+  expect(second).toBe(first);
+  await expect.poll(async () => (await state(request)).uploads).toBe(0);
+  expect((await state(request)).transcripts).toBe(1);
+  const metrics = await request.get('/metrics');
+  expect(metrics.ok()).toBeTruthy();
+  expect(await metrics.text()).toContain('http_requests_total');
+  expect((await request.get('/diagnostics')).ok()).toBeTruthy();
+  expect((await request.post('/transcribe_url', {form: {url:'https://fixture.invalid/x', batch_size:'17'}})).status()).toBe(422);
 });

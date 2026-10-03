@@ -64,3 +64,8 @@ locked Python/Node dependencies, and runs the same tests. Application repos must
 contain the fixes before the infra workflow runs; push their commits first.
 Workflow dispatch accepts `scraper_ref` and `stt_ref` for testing specific branches
 or commits. Automatic runs use their `main` branches.
+
+The seven browser scenarios also verify transcript downloads, source path privacy,
+original text/provenance export after translation and summarization, duplicate
+upload reuse, metrics/diagnostics, and invalid batch limits. Errors are asserted
+using public actionable messages rather than raw model exceptions.

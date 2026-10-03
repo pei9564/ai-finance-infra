@@ -245,7 +245,7 @@ rm -rf "$registry_config"
 ### 5. 選定版本、預覽並部署
 
 從 [GitHub Packages](https://github.com/pei9564?tab=packages) 查兩個 app 已發布的版本，
-目前兩個 overlay 已固定 scraper `sha-33734b8`、STT `sha-9153e89`。
+目前兩個 overlay 已固定 scraper `sha-036e8ec`、STT `sha-c3ba002`。
 這是本地修正版的目標版本；查詢 GHCR 尚未取得這兩個 manifests。先發布它們，
 或編輯以下檔案的兩個 `images[].newTag`，指定其他已發布且包含所需修正的 `sha-...` tag：
 
@@ -405,3 +405,22 @@ STT `/diagnostics`、scraper `/api/diagnostics` 提供狀態與磁碟資訊。
 不傳送全文、URL、credentials 或 webhook 位址。服務每 60 秒檢查 DB／磁碟。
 K3s Service 已加 scrape annotations；要保存歷史圖表仍需自行接 Prometheus 等收集器。
 進程完全停止時無法自行通知，需外部監控／K3s 告警補足。
+
+## 單人使用的資料管理與匯出
+
+同來源、處理選項與模型設定的 STT 提交會重用尚未失敗的原工作；重複檔案以 SHA-256 判斷並清掉多餘上傳檔。請維持單一 STT replica。
+
+清理失敗紀錄與無引用的上傳暫存檔：
+
+```bash
+# 預覽，預設保留 7 天；先使用你的 STT 位址或 make k8s-forward
+curl -X POST 'http://localhost:8000/maintenance/prune?days=7'
+# 核對預覽並完成備份後執行
+curl -X POST 'http://localhost:8000/maintenance/prune?days=7&dry_run=false'
+```
+
+完成的逐字稿不會自動刪除；scraper 清理過期資料時保留翻譯、摘要、STT 工作與收藏，重跑蒐集也保留這些成果。清理 STT 目前需手動呼叫。
+
+STT 任務列表可下載 JSON、Markdown、SRT；scraper 事件卡可下載 JSON、Markdown。匯出含來源、處理時間、模型資訊、翻譯前原文與截斷標記；舊資料缺少資訊時不推測補填。
+
+本次 overlay 指向 scraper `sha-036e8ec` 與 STT `sha-c3ba002`。部署前須先 push 兩個應用 repo，等 GHCR image build 成功，再 push infra；本地 commit 本身不會產生遠端 image。
