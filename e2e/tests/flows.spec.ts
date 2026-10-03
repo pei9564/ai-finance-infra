@@ -1,0 +1,164 @@
+import { test as base, expect, APIRequestContext, Page } from '@playwright/test';
+
+const control = `http://127.0.0.1:${process.env.E2E_CONTROL_PORT || 18799}`;
+const scraper = `http://127.0.0.1:${process.env.E2E_SCRAPER_PORT || 18797}`;
+const transcript = 'Earnings increased by 20 percent. Demand remains strong.';
+const translation = '營收成長百分之二十，需求持續強勁。';
+const summary = '營收成長 20%，需求持續強勁。';
+
+// Every test starts its own app processes and database state, inside a dedicated DB container.
+const test = base.extend<{ pageErrors: string[] }>({
+  pageErrors: [async ({ page }, use) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await use(errors);
+    expect(errors, 'browser JavaScript errors').toEqual([]);
+  }, { auto: true }],
+});
+
+test.beforeEach(async ({ request }) => {
+  expect((await request.post(`${control}/reset`)).ok()).toBeTruthy();
+});
+
+async function upload(page: Page, content: string, topic: string) {
+  await page.locator('[data-tab="file"]').click();
+  await page.locator('#file').setInputFiles({ name: 'earnings.mp3', mimeType: 'audio/mpeg', buffer: Buffer.from(content) });
+  await page.locator('#topic-file').fill(topic);
+  const response = page.waitForResponse(r => r.url().endsWith('/transcribe_file') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: '開始上傳並轉檔' }).click();
+  const result = await response;
+  expect(result.status()).toBe(202);
+  return (await result.json()).job_id as string;
+}
+async function state(request: APIRequestContext) {
+  return (await request.get(`${control}/state`)).json();
+}
+async function holdWorker(page: Page, request: APIRequestContext) {
+  expect((await request.post(`${control}/hold`)).ok()).toBeTruthy();
+  const id = await upload(page, 'hold', 'Running upload');
+  await expect.poll(async () => (await request.get(`/job/${id}`)).json().then(j => j.status)).toBe('running');
+  return id;
+}
+async function submitUrl(page: Page, title: string) {
+  await page.locator('[data-tab="url"]').click();
+  await page.locator('#url').fill('https://fixture.invalid/earnings');
+  await page.locator('#topic-url').fill(title);
+  const response = page.waitForResponse(r => r.url().endsWith('/transcribe_url') && r.request().method() === 'POST');
+  await page.getByRole('button', { name: '開始轉檔', exact: true }).click();
+  const result = await response;
+  expect(result.status()).toBe(202);
+  return (await result.json()).job_id as string;
+}
+
+test('input validation and file upload survive browser reload', async ({ page, request }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '開始轉檔', exact: true }).click();
+  await expect(page.locator('#status')).toHaveText('請輸入網址');
+  await page.locator('[data-tab="file"]').click();
+  await page.getByRole('button', { name: '開始上傳並轉檔' }).click();
+  await expect(page.locator('#status')).toHaveText('請選擇檔案');
+  const id = await upload(page, 'fixture', 'Uploaded earnings');
+  await expect(page.locator('#result')).toHaveValue(transcript);
+  await expect.poll(async () => (await state(request)).uploads).toBe(0);
+  await page.reload();
+  await page.locator('[data-tab="jobs"]').click();
+  const row = page.locator('.jobrow').filter({ hasText: 'Uploaded earnings' });
+  await expect(row.locator('.badge')).toHaveText('done');
+  await row.click();
+  await expect(page.locator('#result')).toHaveValue(transcript);
+  const persisted = await (await request.get(`/job/${id}`)).json();
+  expect(persisted.transcript_id).toBeGreaterThan(0);
+});
+
+test('URL and RSS submissions produce transcripts through real APIs', async ({ page }) => {
+  await page.goto('/');
+  await submitUrl(page, 'URL earnings');
+  await expect(page.locator('#result')).toHaveValue(transcript);
+  await page.locator('[data-tab="feed"]').click();
+  await page.locator('#feed').fill('https://fixture.invalid/feed.xml');
+  await page.getByRole('button', { name: '開始整季轉檔' }).click();
+  await expect(page.locator('#feedStatus')).toContainText('已排入 1 集');
+  await page.locator('[data-tab="jobs"]').click();
+  const row = page.locator('.jobrow').filter({ hasText: 'Fixture episode' });
+  await expect(row.locator('.badge')).toHaveText('done');
+  await row.click();
+  await expect(page.locator('#result')).toHaveValue(transcript);
+});
+
+test('failed upload retains its audio and retries from the jobs UI', async ({ page, request }) => {
+  await page.goto('/');
+  await upload(page, 'fail-once', 'Retry earnings');
+  await expect(page.locator('#status')).toContainText('Fixture temporary inference failure');
+  expect((await state(request)).uploads).toBe(1);
+  await page.locator('[data-tab="jobs"]').click();
+  const row = page.locator('.jobrow').filter({ hasText: 'Retry earnings' });
+  await row.getByRole('button', { name: '重試', exact: true }).click();
+  await expect(row.locator('.badge')).toHaveText('done');
+  await row.click();
+  await expect(page.locator('#result')).toHaveValue(transcript);
+  await expect.poll(async () => (await state(request)).uploads).toBe(0);
+  expect((await state(request)).transcripts).toBe(1);
+});
+
+test('cancelling queued jobs keeps the running job and skips cancelled inference', async ({ page, request }) => {
+  await page.goto('/');
+  await holdWorker(page, request);
+  const queued = await submitUrl(page, 'Cancelled earnings');
+  await page.locator('[data-tab="jobs"]').click();
+  await page.getByRole('button', { name: '取消所有排隊中的任務' }).click();
+  const row = page.locator('.jobrow').filter({ hasText: 'Cancelled earnings' });
+  await expect(row.locator('.badge')).toHaveText('error');
+  await expect(row.locator('.job-error')).toHaveText('使用者取消');
+  expect((await (await request.get(`/job/${queued}`)).json()).status).toBe('error');
+  expect((await request.post(`${control}/release`)).ok()).toBeTruthy();
+  await expect(page.locator('.jobrow').filter({ hasText: 'Running upload' }).locator('.badge')).toHaveText('done');
+  expect((await state(request)).transcripts).toBe(1);
+});
+
+test('abrupt STT restart restores both running upload and queued URL', async ({ page, request }) => {
+  await page.goto('/');
+  const running = await holdWorker(page, request);
+  const queued = await submitUrl(page, 'Recovered earnings');
+  expect((await state(request)).uploads).toBe(1);
+  expect((await request.post(`${control}/restart-stt`)).ok()).toBeTruthy();
+  await page.reload();
+  await page.locator('[data-tab="jobs"]').click();
+  for (const title of ['Running upload', 'Recovered earnings']) {
+    await expect(page.locator('.jobrow').filter({ hasText: title }).locator('.badge')).toHaveText('done');
+  }
+  for (const id of [running, queued]) {
+    expect((await (await request.get(`/job/${id}`)).json()).text).toBe(transcript);
+  }
+  await expect.poll(async () => (await state(request)).uploads).toBe(0);
+  expect((await state(request)).transcripts).toBe(2);
+});
+
+test('scraper media flows through STT, translation, summary, bookmark and deletion', async ({ page, request }) => {
+  await page.goto(scraper);
+  await expect(page.locator('.card-title')).toContainText('Fixture earnings');
+  await page.getByRole('button', { name: '🎙️ 送 STT', exact: true }).click();
+  await expect(page.locator('.card-body-preview')).toContainText(transcript);
+  await expect(page.locator('.stage-translate')).toHaveText('🌐 需翻譯');
+  expect((await state(request)).transcripts).toBe(1);
+
+  await page.locator('button[data-stage="translate"]').click();
+  await expect(page.locator('.card-body-preview')).toContainText(translation);
+  await expect(page.locator('.card-title')).toContainText('測試財報');
+  await page.locator('button[data-stage="summarize"]').click();
+  await expect(page.locator('#daily-view .card-summary')).toHaveText(summary);
+  await page.locator('#daily-view .bookmark-btn').click();
+  await expect(page.locator('#daily-view .bookmark-btn')).toHaveClass(/on/);
+  await page.reload();
+  await expect(page.locator('#daily-view .card-summary')).toHaveText(summary);
+  await expect(page.locator('#daily-view .bookmark-btn')).toHaveClass(/on/);
+  await page.getByRole('button', { name: '⭐ 我的收藏', exact: true }).click();
+  await expect(page.locator('#collection-content')).toContainText('測試財報');
+  await expect(page.locator('#collection-content')).toContainText(summary);
+  await page.getByRole('button', { name: '← 回到日報', exact: true }).click();
+  await page.getByRole('button', { name: '🗑', exact: true }).click();
+  await expect(page.locator('#feed-content .card')).toHaveCount(0);
+  await page.reload();
+  await expect(page.locator('#feed-content .card')).toHaveCount(0);
+  const bookmarks = await (await request.get(`${scraper}/api/bookmarks/uids`)).json();
+  expect(bookmarks).toEqual({ uids: [] });
+});

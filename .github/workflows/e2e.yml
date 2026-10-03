@@ -1,0 +1,60 @@
+name: Browser E2E
+
+on:
+  push:
+    branches: [main]
+    paths: ["e2e/**", ".github/workflows/e2e.yml"]
+  pull_request:
+    paths: ["e2e/**", ".github/workflows/e2e.yml"]
+  workflow_dispatch:
+    inputs:
+      scraper_ref:
+        description: Scraper branch or commit
+        default: main
+      stt_ref:
+        description: STT branch or commit
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ai-finance-infra/e2e
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: ai-finance-infra
+      - uses: actions/checkout@v4
+        with:
+          repository: pei9564/finance-scraper-service
+          ref: ${{ inputs.scraper_ref || 'main' }}
+          path: finance-scraper-service
+      - uses: actions/checkout@v4
+        with:
+          repository: pei9564/stt-ai-worker
+          ref: ${{ inputs.stt_ref || 'main' }}
+          path: stt-ai-worker
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ai-finance-infra/e2e/package-lock.json
+      - uses: astral-sh/setup-uv@v5
+      - run: uv venv .venv --python 3.12
+      - run: uv pip install --python .venv/bin/python -r requirements.lock
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-results
+          path: |
+            ai-finance-infra/e2e/test-results/
+            ai-finance-infra/e2e/playwright-report/
+          retention-days: 14
