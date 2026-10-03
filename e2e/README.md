@@ -3,7 +3,9 @@
 Playwright Chromium tests cover the real STT and scraper UIs, FastAPI routes,
 PostgreSQL repositories, and background workers. Downloads, RSS parsing, Whisper,
 and LLM inference use deterministic fixtures. No GPU, external APIs, or secrets
-are needed. Browser requests are not mocked.
+are needed. The integration flows in `flows.spec.ts` use real browser requests.
+`reading-ui.spec.ts` and `stt-ui.spec.ts` use browser-routed fixtures for empty,
+error, mobile, and response-race scenarios without mutating application data.
 
 Coverage:
 
@@ -14,6 +16,10 @@ Coverage:
 - Abrupt STT process death recovers running uploads and queued URLs from PG.
 - Scraper media → STT HTTP → translation → summary → bookmark → delete,
   with persistence verified after browser reload.
+- Reading workspace search, filters, empty states, load recovery, and mobile navigation.
+- STT task search and filters, keyboard tabs, mobile layout, TXT download content,
+  clipboard fallback, duplicate-submit prevention, stale-response protection,
+  network recovery, and deletion confirmation.
 - Unexpected browser JavaScript exceptions fail the test.
 
 ## Run locally

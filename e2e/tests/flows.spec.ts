@@ -25,7 +25,7 @@ async function upload(page: Page, content: string, topic: string) {
   await page.locator('#file').setInputFiles({ name: 'earnings.mp3', mimeType: 'audio/mpeg', buffer: Buffer.from(content) });
   await page.locator('#topic-file').fill(topic);
   const response = page.waitForResponse(r => r.url().endsWith('/transcribe_file') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: '開始上傳並轉檔' }).click();
+  await page.getByRole('button', { name: '上傳並轉成文字' }).click();
   const result = await response;
   expect(result.status()).toBe(202);
   return (await result.json()).job_id as string;
@@ -44,7 +44,7 @@ async function submitUrl(page: Page, title: string) {
   await page.locator('#url').fill('https://fixture.invalid/earnings');
   await page.locator('#topic-url').fill(title);
   const response = page.waitForResponse(r => r.url().endsWith('/transcribe_url') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: '開始轉檔', exact: true }).click();
+  await page.getByRole('button', { name: '開始轉成文字', exact: true }).click();
   const result = await response;
   expect(result.status()).toBe(202);
   return (await result.json()).job_id as string;
@@ -52,10 +52,10 @@ async function submitUrl(page: Page, title: string) {
 
 test('input validation and file upload survive browser reload', async ({ page, request }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '開始轉檔', exact: true }).click();
+  await page.getByRole('button', { name: '開始轉成文字', exact: true }).click();
   await expect(page.locator('#status')).toHaveText('請輸入網址');
   await page.locator('[data-tab="file"]').click();
-  await page.getByRole('button', { name: '開始上傳並轉檔' }).click();
+  await page.getByRole('button', { name: '上傳並轉成文字' }).click();
   await expect(page.locator('#status')).toHaveText('請選擇檔案');
   const id = await upload(page, 'fixture', 'Uploaded earnings');
   await expect(page.locator('#result')).toHaveValue(transcript);
@@ -63,8 +63,8 @@ test('input validation and file upload survive browser reload', async ({ page, r
   await page.reload();
   await page.locator('[data-tab="jobs"]').click();
   const row = page.locator('.jobrow').filter({ hasText: 'Uploaded earnings' });
-  await expect(row.locator('.badge')).toHaveText('done');
-  await row.click();
+  await expect(row.locator('.badge')).toHaveText('已完成');
+  await row.getByRole('button', { name: '閱讀逐字稿' }).click();
   await expect(page.locator('#result')).toHaveValue(transcript);
   const persisted = await (await request.get(`/job/${id}`)).json();
   expect(persisted.transcript_id).toBeGreaterThan(0);
@@ -83,12 +83,12 @@ test('URL and RSS submissions produce transcripts through real APIs', async ({ p
   await expect(page.locator('#result')).toHaveValue(transcript);
   await page.locator('[data-tab="feed"]').click();
   await page.locator('#feed').fill('https://fixture.invalid/feed.xml');
-  await page.getByRole('button', { name: '開始整季轉檔' }).click();
+  await page.getByRole('button', { name: '建立 Podcast 轉錄' }).click();
   await expect(page.locator('#feedStatus')).toContainText('已排入 1 集');
   await page.locator('[data-tab="jobs"]').click();
   const row = page.locator('.jobrow').filter({ hasText: 'Fixture episode' });
-  await expect(row.locator('.badge')).toHaveText('done');
-  await row.click();
+  await expect(row.locator('.badge')).toHaveText('已完成');
+  await row.getByRole('button', { name: '閱讀逐字稿' }).click();
   await expect(page.locator('#result')).toHaveValue(transcript);
 });
 
@@ -100,8 +100,8 @@ test('failed upload retains its audio and retries from the jobs UI', async ({ pa
   await page.locator('[data-tab="jobs"]').click();
   const row = page.locator('.jobrow').filter({ hasText: 'Retry earnings' });
   await row.getByRole('button', { name: '重試', exact: true }).click();
-  await expect(row.locator('.badge')).toHaveText('done');
-  await row.click();
+  await expect(row.locator('.badge')).toHaveText('已完成');
+  await row.getByRole('button', { name: '閱讀逐字稿' }).click();
   await expect(page.locator('#result')).toHaveValue(transcript);
   await expect.poll(async () => (await state(request)).uploads).toBe(0);
   expect((await state(request)).transcripts).toBe(1);
@@ -112,13 +112,15 @@ test('cancelling queued jobs keeps the running job and skips cancelled inference
   await holdWorker(page, request);
   const queued = await submitUrl(page, 'Cancelled earnings');
   await page.locator('[data-tab="jobs"]').click();
+  await page.getByText('管理排隊任務', {exact:true}).click();
+  page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: '取消所有排隊中的任務' }).click();
   const row = page.locator('.jobrow').filter({ hasText: 'Cancelled earnings' });
-  await expect(row.locator('.badge')).toHaveText('error');
+  await expect(row.locator('.badge')).toHaveText('未完成');
   await expect(row.locator('.job-error')).toHaveText('使用者取消');
   expect((await (await request.get(`/job/${queued}`)).json()).status).toBe('error');
   expect((await request.post(`${control}/release`)).ok()).toBeTruthy();
-  await expect(page.locator('.jobrow').filter({ hasText: 'Running upload' }).locator('.badge')).toHaveText('done');
+  await expect(page.locator('.jobrow').filter({ hasText: 'Running upload' }).locator('.badge')).toHaveText('已完成');
   expect((await state(request)).transcripts).toBe(1);
 });
 
@@ -131,7 +133,7 @@ test('abrupt STT restart restores both running upload and queued URL', async ({ 
   await page.reload();
   await page.locator('[data-tab="jobs"]').click();
   for (const title of ['Running upload', 'Recovered earnings']) {
-    await expect(page.locator('.jobrow').filter({ hasText: title }).locator('.badge')).toHaveText('done');
+    await expect(page.locator('.jobrow').filter({ hasText: title }).locator('.badge')).toHaveText('已完成');
   }
   for (const id of [running, queued]) {
     expect((await (await request.get(`/job/${id}`)).json()).text).toBe(transcript);
