@@ -430,3 +430,9 @@ STT 任務列表可下載 JSON、Markdown、SRT；scraper 事件卡可下載 JSO
 STT 的摘要／會議紀錄／待辦事項沿用 `VLLM_BASE_URL`、`VLLM_MODEL`、`VLLM_API_KEY`；Compose 已將這些設定傳入 STT，Kustomize 的 `stt-config` 也提供相同設定並引用 `app-secrets` 的 API key。修改 LLM 供應者時，請同步調整兩個服務的 ConfigMap。
 
 瀏覽器入口可在 `.env` 設定 `STT_PUBLIC_URL`、`SCRAPER_PUBLIC_URL`。留空時連到目前主機名稱搭配服務 port，因此以 Tailscale IP 開頁也會沿用該主機。Compose 會自動把 `SCRAPER_PORT` 傳給 STT 的返回連結；Kubernetes 使用不同 Ingress 網域／路徑時，請在對應 ConfigMap 設定完整 public URL。public URL 不含 API key，也不要填入叢集內部 DNS。
+
+### 備份與日常閱讀改善
+
+`make backup` 備份 Docker 的 DB、保留音檔與必要設定；`make restore-drill BACKUP_SOURCE=...` 真正還原到隔離容器並比對資料。詳見 [備份與還原](docs/backup-and-restore.md)。K3s 可沿用 `make k8s-backup`／`make k8s-restore`，新版也會保存引用的設定與 Secrets。
+
+Voice Notes 已支援原文引用定位、修正版／AI 版本保留與全部歷史搜尋；Finance Brief 支援已讀、稍後閱讀、隱藏與閱讀位置恢復。資料庫中的版本、收藏、標籤及閱讀狀態會隨 PostgreSQL dump 一起備份；瀏覽器 localStorage 的畫面位置不包含在伺服器備份。

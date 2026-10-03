@@ -11,9 +11,10 @@
 - `postgres.dump`：整個應用 DB 的 PostgreSQL custom-format dump，不含 roles／ownership／ACL。
 - `uploads.tar.gz`：stt-uploads PVC 的內容，保留相對檔名與目錄結構。
 - `metadata.json`：格式版本、UTC 時間、原副本數、app image 版本與檔案 SHA256。
+- `configuration.json`（新版）：工作負載及所引用的 ConfigMaps／Secrets，包含敏感設定。
 
-不包含 Secrets、K3s 控制平面 datastore、Redis 或可重新下載的模型 cache。
-請另外安全保存 Secrets 與 kubeconfig；K3s 本身的備份依官方 datastore 流程處理。
+新版包含應用引用的 Secrets（見下方 configuration.json 說明）；不包含 K3s 控制平面 datastore、Redis 或可重新下載的模型 cache。
+請另外安全保存 kubeconfig；K3s 本身的備份依官方 datastore 流程處理。
 備份完整性用 checksum 檢查，沒有加密；複製到外部儲存前依需要加密。
 預設 `backups/` 不進 Git，bundle 目錄權限 700，工具以 umask 077 建立檔案。
 
@@ -138,7 +139,37 @@ kubectl -n finance get pods -l finance.maintenance=files -o wide
 4. 用毀損 bundle 測試拒絕還原，確認目的資料未改變。
 5. 模擬還原失敗，確認 app 不會自動繼續寫入。
 
-目前已驗證本地控制流程與錯誤保護；兩台主機的備份傳輸、工具相容性與實際恢復仍需上述整合測試。
+Docker 實際還原演練已完成（見下方）；兩台主機的 Kubernetes 備份傳輸與實際恢復仍需上述叢集整合測試。
 
 官方參考：[pg_dump](https://www.postgresql.org/docs/15/app-pgdump.html)、
 [pg_restore](https://www.postgresql.org/docs/15/app-pgrestore.html)。
+
+## Docker Compose 備份與實際還原演練
+
+```bash
+make backup
+make backup-verify BACKUP_SOURCE=backups/<timestamp>
+make restore-drill BACKUP_SOURCE=backups/<timestamp>
+```
+
+`make backup` 暫停原本正在執行的 scraper、STT 與 Watchtower，保留 PostgreSQL 運行；完成或失敗後恢復原本運行狀態。使用檔案鎖避免同時備份／還原，不會改變目前使用 local 或 registry image 的容器。進行中的 AI 整理中斷後需重試，已保存結果不受影響。
+
+Compose bundle 包含 `postgres.dump`、`uploads.tar.gz`、`configuration.tar.gz` 與 `metadata.json`。設定壓縮檔包含 `.env`、Compose／Kustomize 部署設定、Makefile 與維護腳本；可能含 API key／Secrets，整個 bundle 必須私密保存，不要提交到 Git。目錄權限 700、命令以 umask 077 建立檔案，未加密。模型 cache 與未使用的 Redis 不納入。
+
+演練使用無對外 port、無外部網路的臨時 PostgreSQL 15 容器。它真正執行 pg_restore，逐表比較筆數與全體列資料的雜湊，再把音檔解到臨時目錄逐檔比對 SHA256。通過後產生 `restore-drill.json`，最後移除臨時容器及 volume。演練不連線、不還原到目前正式 DB；壓縮檔路徑穿越、連結或 checksum 不符會拒絕處理。
+
+還原到已建立的 Compose 環境：
+
+```bash
+make restore BACKUP_SOURCE=/path/to/bundle
+# 只有確定取代現有資料時才使用：
+make restore BACKUP_SOURCE=/path/to/bundle RESTORE_REPLACE=1
+```
+
+預設拒絕非空 DB／uploads；檢查拒絕時恢復原先服務。真正開始寫入後若還原失敗，應用與 Watchtower 保持停止，避免使用不完整資料。還原採 DB 單一 transaction，但 DB 與音檔之間不是跨系統原子操作。
+
+設定不會自動覆蓋目前 `.env`。在新電腦先將 `configuration.tar.gz` 解到私密的新目錄，檢查並選用其中的 `.env`／部署設定，再建立空白 PostgreSQL 與 app 容器（應用保持停止），執行上述還原。既有環境取代資料前另做備份，不要盲目替換 PostgreSQL 的帳密或 volume 設定。
+
+Kubernetes 新版 bundle 另含 `configuration.json`，保存工作負載、所引用的 ConfigMaps 與 Secrets，並納入 checksum；兩個 app 的副本數在匯出設定中設為 0。只在空白目的環境、初始化 DB 之前套用經檢查的設定，避免把舊帳密套進既有 PostgreSQL。舊版 bundle 沒有這個檔案時，仍須另外保存設定與 Secrets。
+
+本輪已實際驗證 Docker bundle 還原、逐表雜湊一致，以及隔離音檔樣本的內容還原。Kubernetes 的實際叢集演練仍須在你的目的叢集執行；本機驗證不代表已測過兩台電腦的 K3s 傳輸。

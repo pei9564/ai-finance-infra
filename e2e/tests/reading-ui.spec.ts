@@ -14,6 +14,7 @@ async function fixture(page: Page, options: {empty?: boolean, unavailable?: bool
   let collected = false;
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    if (path === '/api/reading') return route.fulfill({json:{}});
     if (path === '/api/feeds') {
       if (options.unavailable) return route.fulfill({status:503,json:{detail:'offline'}});
       return route.fulfill({json:{feeds:options.empty ? [] : rows.map(e=>({source:e.source,feed_name:e.feed_name,count:1,missing_body:0,needs_translate:0,needs_summary:0}))}});
@@ -88,5 +89,19 @@ test('load failure is distinct from an empty library and can be retried', async 
   options.unavailable=false;
   await page.getByRole('button',{name:'重新載入',exact:true}).click();
   await expect(page.getByText('建立你的第一份資訊日報')).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
+
+test('reading position and filters are restored after reload',async({page})=>{
+  const state=await fixture(page);
+  const events=Array.from({length:30},(_,i)=>({...rows[0],uid:'position-'+i,title:'財報觀察 '+i,ai_summary:'閱讀內容。'.repeat(45)}));
+  await page.route('**/api/feeds/events?*',r=>r.fulfill({json:{source:null,feed_name:null,groups:[{date:'2026-10-04',events,missing:0,needs_translate:0,needs_summary:0}]}}));
+  await page.goto(scraper);await expect(page.locator('#feed-content .card')).toHaveCount(30);
+  await page.getByLabel('搜尋目前來源').fill('財報');await page.getByLabel('閱讀篩選',{exact:true}).selectOption('unread');
+  const card=page.locator('[data-reading-uid="position-10"]');
+  await card.evaluate(e=>e.scrollIntoView({block:'start'}));
+  await expect.poll(()=>page.evaluate(()=>JSON.parse(localStorage.getItem('finance.reading.v1')||'{}').uid)).toBe('position-10');
+  await page.reload();await expect(page.getByLabel('搜尋目前來源')).toHaveValue('財報');
+  await expect(page.getByLabel('閱讀篩選',{exact:true})).toHaveValue('unread');await expect(card).toBeInViewport();
   expect(state.errors).toEqual([]);
 });

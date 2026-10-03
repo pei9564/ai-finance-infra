@@ -211,7 +211,7 @@ test('transcript AI notes persist independently and export all three formats', a
   expect((await (await request.get(`/job/${id}`)).json()).text).toBe(transcript);
   expect((await request.post(`${control}/restart-stt`)).ok()).toBeTruthy();
   await page.reload();
-  await expect(page.locator('#notesText')).toHaveText(summary);
+  await expect(page.locator('#notesText')).toContainText(summary);
   await expect(page.getByRole('button',{name:'已產生',exact:true})).toBeDisabled();
 });
 
@@ -225,4 +225,69 @@ test('media article opens its transcript and links back to Finance Brief',async(
   await expect(page.locator('.card-title')).toContainText('Fixture earnings');
   await page.getByRole('link',{name:'開啟 Voice Notes ↗'}).click();
   await expect(page.locator('#result')).toHaveValue(transcript);
+});
+
+test('notes cite original segments and retain edited and generated versions',async({page,request})=>{
+  await page.goto('/');const id=await upload(page,'versions-fixture','Versioned notes');
+  await expect(page.locator('#result')).toHaveValue(transcript);
+  await page.getByRole('button',{name:'產生整理',exact:true}).click();
+  await expect(page.locator('#notesText .source-link')).toHaveCount(1);
+  await page.locator('#notesText .source-link').click();
+  await expect(page.locator('.segment')).toHaveClass(/source-highlight/);
+  await page.getByRole('button',{name:'編輯我的版本'}).click();
+  await page.getByLabel('整理修正版').fill('我的財報重點 [S1]');
+  await page.getByRole('button',{name:'儲存修正版'}).click();
+  await expect(page.locator('#notesText')).toContainText('我的財報重點');
+  await page.reload();await expect(page.locator('#notesText')).toContainText('我的財報重點');
+  const markdown=await request.get(`/job/${id}/notes/summary/export`);expect(await markdown.text()).toContain('我的財報重點');
+  await page.locator('#noteInstruction').fill('fixture-fail-note');
+  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'重新產生',exact:true}).click();
+  await expect(page.locator('#notesStatus')).toContainText('測試重新產生失敗');
+  await expect(page.locator('#notesText')).toContainText('我的財報重點');
+  await page.locator('#noteInstruction').fill('只整理投資相關內容');
+  page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'重新產生',exact:true}).click();
+  await expect(page.locator('#notesStatus')).toContainText('fixture-notes');
+  await expect(page.locator('#notesText')).toContainText(summary);
+  await page.getByLabel('查看版本').selectOption('version:0');
+  await expect(page.locator('#notesText')).toContainText('我的財報重點');
+  const previous=await request.get(`/job/${id}/notes/summary/export?version=version:0`);expect(await previous.text()).toContain('我的財報重點');
+  await page.getByLabel('查看版本').selectOption('original');await expect(page.locator('#notesText')).toContainText(summary);
+  expect((await (await request.get(`/job/${id}`)).json()).text).toBe(transcript);
+});
+
+test('historical library searches transcript text and persists names tags and favorites',async({page,request})=>{
+  await page.goto('/');const id=await upload(page,'library-fixture','Initial title');
+  await expect(page.locator('#result')).toHaveValue(transcript);
+  await page.getByRole('tab',{name:'任務',exact:true}).click();
+  const row=page.locator('.jobrow').filter({hasText:'Initial title'});
+  await row.getByRole('button',{name:'收藏任務',exact:true}).click();
+  await row.getByRole('button',{name:'名稱與標籤',exact:true}).click();
+  await page.getByLabel('任務名稱').fill('我的財報資料庫');await page.getByLabel('標籤（逗號分隔）').fill('財報, 研究');
+  await page.getByRole('button',{name:'儲存任務資訊',exact:true}).click();
+  expect((await request.post(`${control}/age-job/${id}`)).ok()).toBeTruthy();
+  await page.getByLabel('任務時間範圍').selectOption('all');
+  await page.getByLabel('搜尋任務').fill('Demand remains strong');
+  await page.getByLabel('只看收藏', {exact:true}).check();await page.getByLabel('標籤篩選', {exact:true}).fill('研究');
+  await expect(page.locator('.jobrow')).toHaveCount(1);await expect(page.locator('.job-title')).toHaveText('我的財報資料庫');
+  expect((await request.post(`${control}/restart-stt`)).ok()).toBeTruthy();await page.reload();
+  await expect(page.locator('.jobrow')).toHaveCount(1);await expect(page.locator('.jobrow')).toContainText('#財報 #研究');
+  expect((await (await request.get(`/job/${id}`)).json()).favorite).toBe(true);
+  await page.getByLabel('標籤篩選', {exact:true}).fill('不存在');await expect(page.locator('.jobrow')).toHaveCount(0);
+});
+
+test('news reading later and hidden states persist across reloads',async({page,request})=>{
+  await page.goto(scraper);
+  await page.getByRole('button',{name:'稍後閱讀',exact:true}).click();
+  await expect(page.getByRole('button',{name:'已加入稍後閱讀',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'標為已讀',exact:true}).click();
+  await expect(page.getByRole('button',{name:'已讀 · 標為未讀',exact:true})).toBeVisible();
+  await page.reload();await expect(page.getByRole('button',{name:'已加入稍後閱讀',exact:true})).toBeVisible();
+  await page.getByLabel('閱讀篩選', {exact:true}).selectOption('unread');await expect(page.locator('#feed-content .card')).toHaveCount(0);
+  await page.getByLabel('閱讀篩選', {exact:true}).selectOption('later');await expect(page.locator('#feed-content .card')).toHaveCount(1);
+  await page.getByRole('button',{name:'隱藏內容',exact:true}).click();await expect(page.locator('#feed-content .card')).toHaveCount(0);
+  await page.getByLabel('閱讀篩選', {exact:true}).selectOption('hidden');await expect(page.locator('#feed-content .card')).toHaveCount(1);
+  await page.reload();await expect(page.getByLabel('閱讀篩選', {exact:true})).toHaveValue('hidden');
+  await page.getByRole('button',{name:'取消隱藏',exact:true}).click();
+  await expect(page.locator('#feed-content .card')).toHaveCount(0);
+  const states=await (await request.get(`${scraper}/api/reading`)).json();expect(states['e2e-media']).toEqual({read:true,later:true,hidden:false});
 });

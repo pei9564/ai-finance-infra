@@ -5,9 +5,9 @@ resources:
 # Desired app revisions; publish these commits to GHCR before deploying.
 images:
   - name: ghcr.io/pei9564/finance-scraper-service
-    newTag: sha-6c6e2af
+    newTag: sha-0ccb18f
   - name: ghcr.io/pei9564/stt-ai-worker
-    newTag: sha-ea5e6ac
+    newTag: sha-3a5d60e
 configMapGenerator:
   - name: stt-config
     behavior: merge

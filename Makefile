@@ -46,6 +46,8 @@ LOCAL := STT_DEVICE=$(DEVICE) $(BASE) -f "$(ROOT)/docker-compose.local.yml"
 .PHONY: help init require-env config login images pull build up update down stop restart logs ps auto-update e2e e2e-setup
 help:
 	@printf '%s\n' \
+	  'make backup / restore      Back up or restore Compose DB, uploads and settings' \
+	  'make restore-drill         Verify BACKUP_SOURCE in an isolated PostgreSQL container' \
 	  'make init                  Create .env without overwriting an existing file' \
 	  'make login                 Log in to ghcr.io (GHCR_USER=pei9564)' \
 	  'make up                    Pull published images and start all four core services' \
@@ -190,3 +192,14 @@ k8s-restore:
 	@test -n "$(BACKUP_SOURCE)" || { printf '%s\n' 'Set BACKUP_SOURCE=/path/to/completed-backup.' >&2; exit 1; }
 	@test "$(RESTORE_REPLACE)" = 0 -o "$(RESTORE_REPLACE)" = 1 || { printf '%s\n' 'RESTORE_REPLACE must be 0 or 1.' >&2; exit 1; }
 	@$(PYTHON) "$(ROOT)/scripts/k8s_backup.py" $(CLUSTER_ARGS) --overlay "$(K8S_OVERLAY)" restore --directory "$(BACKUP_SOURCE)" $(if $(filter 1,$(RESTORE_REPLACE)),--replace-existing)
+
+.PHONY: backup restore backup-verify restore-drill
+backup: require-env
+	@$(PYTHON) "$(ROOT)/scripts/compose_backup.py" backup --env-file "$(ENV_FILE)" --directory "$(BACKUP_DIR)"
+restore: require-env
+	@test -n "$(BACKUP_SOURCE)" || { echo 'Set BACKUP_SOURCE to a completed bundle.' >&2; exit 1; }
+	@$(PYTHON) "$(ROOT)/scripts/compose_backup.py" restore --env-file "$(ENV_FILE)" --directory "$(BACKUP_SOURCE)" $(if $(filter 1,$(RESTORE_REPLACE)),--replace-existing)
+backup-verify:
+	@$(PYTHON) "$(ROOT)/scripts/compose_backup.py" verify --directory "$(BACKUP_SOURCE)"
+restore-drill:
+	@$(PYTHON) "$(ROOT)/scripts/compose_backup.py" drill --directory "$(BACKUP_SOURCE)"

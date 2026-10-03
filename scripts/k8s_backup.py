@@ -1,4 +1,4 @@
-"""Quiesced PostgreSQL + uploads backup/restore. No Secret values are exported."""
+"""Quiesced PostgreSQL + uploads backup/restore. Configuration and referenced Secrets are saved in a private bundle."""
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -35,6 +35,9 @@ def validate_bundle(directory):
         path = directory / name
         if not path.is_file() or sha256(path) != meta['sha256'][name]:
             raise ValueError(f'Invalid backup checksum: {name}')
+    if 'configuration.json' in meta['sha256']:
+        if sha256(directory / 'configuration.json') != meta['sha256']['configuration.json']:
+            raise ValueError('Invalid configuration checksum')
     with (directory / 'postgres.dump').open('rb') as stream:
         if stream.read(5) != b'PGDMP':
             raise ValueError('Expected a PostgreSQL custom-format dump.')
@@ -125,6 +128,40 @@ def database(kube, command, *, source=None, output=None):
                           '--', 'sh', '-c', command], source=source, output=output)
 
 
+def configuration(kube, state):
+    """Export only resources referenced by these workloads, with app writers paused."""
+    workloads = [('Deployment', name, dep) for name,dep in state.items()]
+    workloads.append(('StatefulSet', 'postgres', kube.get('statefulset', 'postgres')))
+    resources, refs = [], set()
+    for kind,name,workload in workloads:
+        spec = json.loads(json.dumps(workload['spec']))
+        if kind == 'Deployment':
+            spec['replicas'] = 0
+        resources.append({'apiVersion':'apps/v1', 'kind':kind,
+                          'metadata':{'name':name,'namespace':kube.namespace},'spec':spec})
+        pod = spec.get('template', {}).get('spec', {})
+        for pull in pod.get('imagePullSecrets', []):
+            refs.add(('Secret', pull['name']))
+        for container in pod.get('containers', []):
+            for item in container.get('envFrom', []):
+                for key,resource in [('configMapRef','ConfigMap'),('secretRef','Secret')]:
+                    if key in item:
+                        refs.add((resource,item[key]['name']))
+            for item in container.get('env', []):
+                for key,resource in [('configMapKeyRef','ConfigMap'),('secretKeyRef','Secret')]:
+                    if key in item.get('valueFrom', {}):
+                        refs.add((resource,item['valueFrom'][key]['name']))
+    for kind,name in sorted(refs):
+        value = kube.get(kind.lower(), name)
+        item = {'apiVersion':'v1','kind':kind,'metadata':{'name':name,'namespace':kube.namespace}, 'data':value.get('data',{})}
+        if kind == 'Secret':
+            item['type'] = value.get('type','Opaque')
+        if value.get('binaryData'):
+            item['binaryData'] = value['binaryData']
+        resources.append(item)
+    return {'apiVersion':'v1','kind':'List','items':resources}
+
+
 def backup(kube, directory):
     # Never overwrite an earlier backup. Restrict access to financial/audio data.
     directory.mkdir(parents=True, mode=0o700, exist_ok=False)
@@ -142,11 +179,13 @@ def backup(kube, directory):
                 database(kube, 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc --no-owner --no-acl', output=dump)
                 stream_command(kube, ['exec', '-n', kube.namespace, helper, '--', 'tar', '-czf', '-',
                                       '-C', '/data/uploads', '.'], output=uploads)
+                config = directory / 'configuration.json'
+                config.write_text(json.dumps(configuration(kube, state), indent=2))
                 meta = {'format_version': 1, 'created_at': datetime.now(timezone.utc).isoformat(),
                         'namespace': kube.namespace, 'replicas': replicas,
                         'images': {name: dep['spec']['template']['spec']['containers'][0]['image']
                                    for name, dep in state.items()},
-                        'sha256': {path.name: sha256(path) for path in (dump, uploads)}}
+                        'sha256': {path.name: sha256(path) for path in (dump, uploads, config)}}
                 # Presence of metadata.json marks a complete backup.
                 (directory / 'metadata.json').write_text(json.dumps(meta, indent=2) + '\n')
                 validate_bundle(directory)

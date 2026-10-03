@@ -26,6 +26,9 @@ Coverage:
   integration flows still exercise real multipart uploads.
 - All three transcript AI note types, independent exports and PG persistence
   across an STT restart, plus article → transcript → reading workspace navigation.
+- Cited note navigation, edited/original/history versions, failed regeneration
+  preserving prior results, historical full-text search, tags/favorites, reading
+  states, and reading-position recovery.
 - Unexpected browser JavaScript exceptions fail the test.
 
 ## Run locally

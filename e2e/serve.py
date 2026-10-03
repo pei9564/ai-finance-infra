@@ -77,9 +77,12 @@ def stt_app():
     class FixtureNotes:
         enabled = True
         def chat(self, text, mode):
+            if 'fixture-fail-note' in text:
+                from app.services.notes import NotesError
+                raise NotesError('測試重新產生失敗')
             return {'summary': '營收成長 20%，需求持續強勁。',
                     'minutes': '討論：營收與需求。\n決議：未提及。',
-                    'actions': '未提及明確待辦事項。'}[mode]
+                    'actions': '未提及明確待辦事項。'}[mode] + ' [S1]'
     from dataclasses import replace
     return create_app(replace(load_settings(), vllm_model='fixture-notes',
         scraper_public_url=f'http://127.0.0.1:{SCRAPER_PORT}'),
@@ -175,6 +178,12 @@ def supervise():
         launch("stt")
         launch("scraper")
         return {"status": "reset"}
+
+    @controller.post('/age-job/{job_id}')
+    def age_job(job_id: str):
+        with psycopg.connect(os.environ['DB_URL']) as conn:
+            conn.execute("UPDATE jobs SET created_at=NOW()-INTERVAL '100 days' WHERE id=%s", (job_id,))
+        return {'status':'aged'}
 
     @controller.post("/hold")
     def hold():
