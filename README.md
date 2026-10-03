@@ -243,7 +243,9 @@ rm -rf "$registry_config"
 ### 5. 選定版本、預覽並部署
 
 從 [GitHub Packages](https://github.com/pei9564?tab=packages) 查兩個 app 已發布的版本，
-編輯以下檔案的兩個 `images[].newTag`，將 `latest` 改成實際的 `sha-...` tag：
+目前兩個 overlay 已固定 scraper `sha-33734b8`、STT `sha-9153e89`。
+這是本地修正版的目標版本；查詢 GHCR 尚未取得這兩個 manifests。先發布它們，
+或編輯以下檔案的兩個 `images[].newTag`，指定其他已發布且包含所需修正的 `sha-...` tag：
 
 ```bash
 nano k8s/overlays/homelab/kustomization.yaml
@@ -350,3 +352,9 @@ STT 仍限定單一 replica、單一 uvicorn process；PG 任務恢復不是多 
 GPU allocatable 數量、NVIDIA RuntimeClass、local-path、應用 Secret 的鍵名及 GHCR pull Secret 類型。
 缺少必要設定時回傳非零；未建立的 PVC 與等待第一個 Pod 的 Pending PVC 會提示。
 此檢查需要 Python 3，不讀取／輸出 Secret 值，也不驗證 credential 是否有效或跨節點網路。
+
+應用 image pins 由 `make k8s-check` 與 CI 檢查，拒絕 latest／main 等未固定版本。
+目前目標為 scraper `33734b89873d61e9430f5e801a906ed617607cd1`、
+STT `9153e8917e9ff09014a101f967d4c1d5e1f9416e`。
+這是部署目標，不代表已發布；GHCR image 可用性仍需發布 CI／實際 pull 確認。
+SHA tag 依 CI 的版本慣例追蹤 commit；要完全綁定 image 內容，可改用 Kustomize images 的 `digest: sha256:...`。

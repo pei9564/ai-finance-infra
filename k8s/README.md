@@ -58,7 +58,7 @@ rm -rf "$registry_config"
 ## 環境調整
 
 部署前編輯 `overlays/homelab/kustomization.yaml` 的 `images[].newTag`，
-把相容用的 `latest` 改成 GHCR 已發布的 `sha-<短 SHA>`。兩個 app 的 SHA 可以不同。
+目前固定為 scraper `sha-33734b8`、STT `sha-9153e89`；兩個 app 的 SHA 可以不同。
 本地尚未 push 的 commit 不會有可拉取的 image。
 
 模型／LLM 設定可在 overlay 加 `configMapGenerator`（`behavior: merge`），
@@ -122,3 +122,9 @@ STT 始終單副本、Recreate，單一程序內工作佇列不支援多 Pod 競
 GPU allocatable 數量、NVIDIA RuntimeClass、local-path、應用 Secret 的鍵名及 GHCR pull Secret 類型。
 缺少必要設定時回傳非零；未建立的 PVC 與等待第一個 Pod 的 Pending PVC 會提示。
 此檢查需要 Python 3，不讀取／輸出 Secret 值，也不驗證 credential 是否有效或跨節點網路。
+
+應用 image pins 由 `make k8s-check` 與 CI 檢查，拒絕 latest／main 等未固定版本。
+目前目標為 scraper `33734b89873d61e9430f5e801a906ed617607cd1`、
+STT `9153e8917e9ff09014a101f967d4c1d5e1f9416e`。
+這是部署目標，不代表已發布；GHCR image 可用性仍需發布 CI／實際 pull 確認。
+SHA tag 依 CI 的版本慣例追蹤 commit；要完全綁定 image 內容，可改用 Kustomize images 的 `digest: sha256:...`。

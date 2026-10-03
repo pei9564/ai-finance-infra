@@ -2,9 +2,9 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
-# Replace latest with a published sha-<short SHA> tag before deployment.
+# Desired app revisions; publish these commits to GHCR before deploying.
 images:
   - name: ghcr.io/pei9564/finance-scraper-service
-    newTag: latest
+    newTag: sha-33734b8
   - name: ghcr.io/pei9564/stt-ai-worker
-    newTag: latest
+    newTag: sha-9153e89

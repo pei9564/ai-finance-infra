@@ -137,6 +137,7 @@ k8s-check:
 	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(ROOT)/k8s/overlays/homelab" > /dev/null
 	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(ROOT)/k8s/overlays/cpu" > /dev/null
 	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(ROOT)/k8s/optional/vllm-external" > /dev/null
+	@$(PYTHON) "$(ROOT)/scripts/check_images.py" --kubectl "$(KUBECTL)" --root "$(ROOT)"
 	@printf '%s\n' 'Kustomize configurations render successfully (offline check).'
 
 k8s-target:
