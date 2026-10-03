@@ -75,6 +75,7 @@ CPU overlay 保留相同資源名稱與 PVC，適合另一個測試叢集；不�
 make k8s-check                         # 離線 render 所有設定
 make k8s-render                        # 預設 homelab
 make k8s-render K8S_OVERLAY=cpu
+make k8s-doctor KUBE_CONTEXT=<context>  # read-only preflight
 make k8s-diff KUBE_CONTEXT=<context>    # 有差異時 kubectl diff exit code 為 1
 make k8s-deploy KUBE_CONTEXT=<context>
 make k8s-status KUBE_CONTEXT=<context>
@@ -116,3 +117,8 @@ STT 始終單副本、Recreate，單一程序內工作佇列不支援多 Pod 競
 再把該目錄加入 overlay 的 resources（`../../optional/vllm-external`），
 並合併 scraper-config 的 `VLLM_BASE_URL=http://vllm-gateway:8000/v1` 與 `VLLM_MODEL`。
 只有主機可達的 MagicDNS 名稱不代表 Pod 也能解析，請實測 Pod 到 gateway 的連線。
+
+`make k8s-doctor` 會檢查選定 context、Ready／可排程節點、homelab 的 data／gpu labels、
+GPU allocatable 數量、NVIDIA RuntimeClass、local-path、應用 Secret 的鍵名及 GHCR pull Secret 類型。
+缺少必要設定時回傳非零；未建立的 PVC 與等待第一個 Pod 的 Pending PVC 會提示。
+此檢查需要 Python 3，不讀取／輸出 Secret 值，也不驗證 credential 是否有效或跨節點網路。

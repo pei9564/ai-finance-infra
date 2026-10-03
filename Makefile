@@ -12,6 +12,8 @@ K8S_OVERLAY ?= homelab
 K8S_DIR := $(ROOT)/k8s/overlays/$(K8S_OVERLAY)
 K8S_NAMESPACE := finance
 K8S_APP ?= finance-scraper-service
+PYTHON ?= python3
+CLUSTER_ARGS := --kubectl "$(KUBECTL)" --kubeconfig "$(KUBE_CONFIG)" --context "$(KUBE_CONTEXT)" --namespace "$(K8S_NAMESPACE)"
 KUBE := $(if $(KUBE_CONFIG),KUBECONFIG="$(KUBE_CONFIG)") $(KUBECTL) $(if $(KUBE_CONTEXT),--context "$(KUBE_CONTEXT)")
 SERVICES := postgres redis finance-scraper-service stt-ai-worker
 APPS := finance-scraper-service stt-ai-worker
@@ -59,6 +61,7 @@ help:
 	  'make k8s-check             Check both Kustomize overlays without a cluster' \
 	  'make k8s-diff / k8s-deploy Preview / apply to the selected Kubernetes context' \
 	  'make k8s-target            Show context/API server (KUBE_CONFIG=/path supported)' \
+	  'make k8s-doctor            Check nodes, GPU, Secrets and storage (read-only)' \
 	  'make k8s-status            Show pods, services and persistent volumes' \
 	  'make k8s-logs              Follow app logs (K8S_APP=stt-ai-worker supported)' \
 	  'make k8s-forward           Open scraper on localhost:8080'
@@ -154,3 +157,7 @@ k8s-logs:
 
 k8s-forward:
 	@$(KUBE) -n $(K8S_NAMESPACE) port-forward service/finance-scraper-service 8080:8080
+
+.PHONY: k8s-doctor
+k8s-doctor:
+	@$(PYTHON) "$(ROOT)/scripts/k8s_doctor.py" $(CLUSTER_ARGS) --overlay "$(K8S_OVERLAY)"

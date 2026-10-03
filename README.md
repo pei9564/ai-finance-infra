@@ -249,6 +249,7 @@ rm -rf "$registry_config"
 nano k8s/overlays/homelab/kustomization.yaml
 make k8s-check
 make k8s-render
+make k8s-doctor                   # read-only preflight
 make k8s-diff
 ```
 
@@ -344,3 +345,8 @@ STT 仍限定單一 replica、單一 uvicorn process；PG 任務恢復不是多 
 ## 瀏覽器端到端測試
 
 [Playwright E2E](e2e/README.md) 會啟動隔離 PostgreSQL、scraper 與 STT，驗證上傳、任務重試、取消、重啟恢復，以及影音轉錄到摘要與收藏的完整 UI 流程。測試無需 GPU 或外部服務 credential，失敗時保留 trace、截圖與影片；GitHub Actions workflow 為 `.github/workflows/e2e.yml`。
+
+`make k8s-doctor` 會檢查選定 context、Ready／可排程節點、homelab 的 data／gpu labels、
+GPU allocatable 數量、NVIDIA RuntimeClass、local-path、應用 Secret 的鍵名及 GHCR pull Secret 類型。
+缺少必要設定時回傳非零；未建立的 PVC 與等待第一個 Pod 的 Pending PVC 會提示。
+此檢查需要 Python 3，不讀取／輸出 Secret 值，也不驗證 credential 是否有效或跨節點網路。

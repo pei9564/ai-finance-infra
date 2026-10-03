@@ -5,11 +5,15 @@ on:
     paths:
       - 'k8s/**'
       - 'Makefile'
+      - 'scripts/**'
+      - 'tests/**'
       - '.github/workflows/kustomize.yml'
   pull_request:
     paths:
       - 'k8s/**'
       - 'Makefile'
+      - 'scripts/**'
+      - 'tests/**'
       - '.github/workflows/kustomize.yml'
   workflow_dispatch:
 
@@ -37,6 +41,8 @@ jobs:
           tar -xzf kubeconform-linux-amd64.tar.gz kubeconform
           chmod +x kubectl kubeconform
           printf '%s\n' "$tool_dir" >> "$GITHUB_PATH"
+      - name: Check administration tools
+        run: python3 -m unittest discover -s tests -v
       - name: Render and validate Kubernetes schemas
         shell: bash
         run: |
