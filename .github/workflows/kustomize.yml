@@ -48,6 +48,6 @@ jobs:
         run: |
           set -euo pipefail
           make k8s-check
-          for config in k8s/overlays/homelab k8s/overlays/cpu k8s/optional/vllm-external; do
+          for config in k8s/overlays/homelab k8s/overlays/cpu k8s/optional/vllm-external k8s/addons/nvidia-device-plugin; do
             kubectl kustomize "$config" | kubeconform -strict -summary -kubernetes-version 1.35.0
           done

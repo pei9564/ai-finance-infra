@@ -11,6 +11,7 @@ KUBE_CONTEXT ?=
 K8S_OVERLAY ?= homelab
 K8S_DIR := $(ROOT)/k8s/overlays/$(K8S_OVERLAY)
 K8S_NAMESPACE := finance
+GPU_ADDON_DIR := $(ROOT)/k8s/addons/nvidia-device-plugin
 K8S_APP ?= finance-scraper-service
 PYTHON ?= python3
 CLUSTER_ARGS := --kubectl "$(KUBECTL)" --kubeconfig "$(KUBE_CONFIG)" --context "$(KUBE_CONTEXT)" --namespace "$(K8S_NAMESPACE)"
@@ -62,6 +63,8 @@ help:
 	  'make k8s-diff / k8s-deploy Preview / apply to the selected Kubernetes context' \
 	  'make k8s-target            Show context/API server (KUBE_CONFIG=/path supported)' \
 	  'make k8s-doctor            Check nodes, GPU, Secrets and storage (read-only)' \
+	  'make k8s-gpu-render        Preview the pinned NVIDIA device plugin' \
+	  'make k8s-gpu-install       Install the GPU plugin after runtime setup' \
 	  'make k8s-status            Show pods, services and persistent volumes' \
 	  'make k8s-logs              Follow app logs (K8S_APP=stt-ai-worker supported)' \
 	  'make k8s-forward           Open scraper on localhost:8080'
@@ -137,6 +140,7 @@ k8s-check:
 	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(ROOT)/k8s/overlays/homelab" > /dev/null
 	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(ROOT)/k8s/overlays/cpu" > /dev/null
 	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(ROOT)/k8s/optional/vllm-external" > /dev/null
+	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(GPU_ADDON_DIR)" > /dev/null
 	@$(PYTHON) "$(ROOT)/scripts/check_images.py" --kubectl "$(KUBECTL)" --root "$(ROOT)"
 	@printf '%s\n' 'Kustomize configurations render successfully (offline check).'
 
@@ -162,3 +166,13 @@ k8s-forward:
 .PHONY: k8s-doctor
 k8s-doctor:
 	@$(PYTHON) "$(ROOT)/scripts/k8s_doctor.py" $(CLUSTER_ARGS) --overlay "$(K8S_OVERLAY)"
+
+.PHONY: k8s-gpu-render k8s-gpu-install
+k8s-gpu-render:
+	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(GPU_ADDON_DIR)"
+
+k8s-gpu-install: k8s-target
+	@$(KUBE) get runtimeclass nvidia
+	@nodes="$$( $(KUBE) get nodes -l finance.node/role=gpu -o name )"; test -n "$$nodes" || { printf '%s\n' 'No GPU-labeled node found.' >&2; exit 1; }
+	@$(KUBE) apply -k "$(GPU_ADDON_DIR)"
+	@$(KUBE) -n kube-system rollout status daemonset/nvidia-device-plugin-daemonset --timeout=180s

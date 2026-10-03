@@ -199,7 +199,9 @@ kubectl get node finance-gpu -o jsonpath='{.status.allocatable.nvidia\.com/gpu}{
 ```
 
 如果名稱不同，替換上述兩個名稱。最後一個指令應顯示至少 `1`；
-空白代表 GPU 尚未被 device plugin 提供，先完成 GPU 設定再部署。
+空白代表 GPU 尚未被 device plugin 提供。B 的驅動／Toolkit 與 NVIDIA runtime 就緒後，
+先執行 `make k8s-gpu-render`／`make k8s-gpu-install` 安裝固定 v0.20.1，再查 GPU 數量。
+完整安裝條件與來源見 [GPU addon 文件](k8s/addons/nvidia-device-plugin/README.md)。
 
 ### 3. 建立應用 Secrets
 

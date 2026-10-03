@@ -84,9 +84,18 @@ curl -sfL https://get.k3s.io | sh -s - agent
 ```
 
 若先安裝 K3s 後才裝 Toolkit，重啟 B 的 `k3s-agent`。
-按照 [NVIDIA device plugin 官方部署方式](https://github.com/NVIDIA/k8s-device-plugin#deployment-via-helm)
-安裝 plugin，固定 chart 版本，確保 plugin Pod 使用 `runtimeClassName: nvidia`，
-並只排到 GPU 節點。安裝第三方 plugin 可以使用官方 Helm chart，應用仍由 Kustomize 管理。
+本 repo 保存固定版 **v0.20.1** 的官方 device plugin manifest，透過 Kustomize 加入
+NVIDIA RuntimeClass 與 `finance.node/role=gpu` selector，不需要額外安裝 Helm。
+在管理電腦設定 kubeconfig 後執行：
+
+```bash
+make k8s-gpu-render
+make k8s-gpu-install
+kubectl -n kube-system get pods -l name=nvidia-device-plugin-ds -o wide
+```
+
+安裝詳細條件、upstream 來源與更新方式見 [GPU addon 文件](../k8s/addons/nvidia-device-plugin/README.md)。
+若已有 GPU Operator／Helm 管理的 device plugin，先確認現有配置，不要重複部署。
 
 完成後從有叢集存取權的電腦確認：
 
