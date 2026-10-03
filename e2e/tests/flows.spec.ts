@@ -143,7 +143,7 @@ test('abrupt STT restart restores both running upload and queued URL', async ({ 
 test('scraper media flows through STT, translation, summary, bookmark and deletion', async ({ page, request }) => {
   await page.goto(scraper);
   await expect(page.locator('.card-title')).toContainText('Fixture earnings');
-  await page.getByRole('button', { name: '🎙️ 送 STT', exact: true }).click();
+  await page.getByRole('button', { name: '🎙️ 轉成文字', exact: true }).click();
   await expect(page.locator('.card-body-preview')).toContainText(transcript);
   await expect(page.locator('.stage-translate')).toHaveText('🌐 需翻譯');
   expect((await state(request)).transcripts).toBe(1);
@@ -167,7 +167,9 @@ test('scraper media flows through STT, translation, summary, bookmark and deleti
   await expect(page.locator('#collection-content')).toContainText('測試財報');
   await expect(page.locator('#collection-content')).toContainText(summary);
   await page.getByRole('button', { name: '← 回到日報', exact: true }).click();
-  await page.getByRole('button', { name: '🗑', exact: true }).click();
+  await page.locator('#daily-view .card-menu > summary').click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: '刪除這篇內容', exact: true }).click();
   await expect(page.locator('#feed-content .card')).toHaveCount(0);
   await page.reload();
   await expect(page.locator('#feed-content .card')).toHaveCount(0);
