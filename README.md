@@ -389,3 +389,19 @@ Compose 沒有 Kubernetes liveness 控制器，逾時後請自行 restart STT。
 LLM HTTP timeout 用 `LLM_TIMEOUT_SECONDS`（120），空白／格式錯誤回覆視為失敗。
 scraper STT 輪詢由 `STT_TIMEOUT_SECONDS` 控制；infra 預設 7200 秒，
 超時只停止等候，不會取消遠端工作，可到 STT UI 查看它。
+
+## 監控與通知
+
+兩個服務提供 Prometheus 相容的 `/metrics`，包含 HTTP 次數／耗時、背景操作成功／失敗與耗時。
+STT 另含 queued jobs、worker_up、uploads 可用磁碟；scraper 含 pipeline／STT 提交數。
+labels 使用路由模板，不含 job ID／來源網址／逐字稿，避免無限 cardinality。
+每個 HTTP 回應有 `X-Request-ID`，可傳入合法 ID；scraper 會轉送它到 STT／LLM，
+STT 保存原提交 request ID，worker logs 用 job_id 連結處理時間。
+STT `/diagnostics`、scraper `/api/diagnostics` 提供狀態與磁碟資訊。
+
+可選 `ALERT_WEBHOOK_URL` 接受 JSON `{service, code, job_id}`，預設空白不發通知。
+工作失敗／逾時、HTTP 5xx、DB 不可用與低磁碟空間會告警，同類通知 5 分鐘合併，
+有限背景佇列與 5 秒 HTTP timeout 避免影響工作；投遞失敗不自動重試。
+不傳送全文、URL、credentials 或 webhook 位址。服務每 60 秒檢查 DB／磁碟。
+K3s Service 已加 scrape annotations；要保存歷史圖表仍需自行接 Prometheus 等收集器。
+進程完全停止時無法自行通知，需外部監控／K3s 告警補足。

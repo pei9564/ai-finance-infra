@@ -3,6 +3,10 @@ kind: Service
 metadata:
   name: finance-scraper-service
   namespace: finance
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8080"
 spec:
   ports:
     - port: 8080
@@ -36,6 +40,12 @@ spec:
             - configMapRef:
                 name: scraper-config
           env:
+            - name: ALERT_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: ALERT_WEBHOOK_URL
+                  optional: true
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:

@@ -44,6 +44,7 @@ services:
     environment:
       # --- infra 層級連線設定 (動態組裝) ---
       # finance-scraper-service 程式讀的是 PG_DSN (不是 DB_URL),要用 docker 服務名 postgres
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
       - PG_DSN=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       # 容器內無法用 localhost 連到 host 上的 vLLM gateway,用 host.docker.internal
       - VLLM_BASE_URL=${VLLM_BASE_URL:-http://host.docker.internal:8000/v1}
@@ -73,6 +74,7 @@ services:
       - "8001:8000"  # 前端走 host 8001 → 容器 8000 (避開 finance-scraper-service 佔的 8000)
     environment:
       # --- infra 層級連線設定 (動態組裝) ---
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
       - DB_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       # --- application 設定 (從 .env 讀,給合理 default) ---
       - MODEL=${STT_MODEL:-medium}                    # tiny / base / small / medium / large-v3
