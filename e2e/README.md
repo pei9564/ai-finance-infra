@@ -20,6 +20,10 @@ Coverage:
 - STT task search and filters, keyboard tabs, mobile layout, TXT download content,
   clipboard fallback, duplicate-submit prevention, stale-response protection,
   network recovery, and deletion confirmation.
+- Timeline parsing/search/copy, text search navigation, reload recovery, missing
+  jobs and corrupt local storage, upload progress/abort/error states, and opt-in
+  completion notifications. Upload event timing uses a controlled transport;
+  integration flows still exercise real multipart uploads.
 - Unexpected browser JavaScript exceptions fail the test.
 
 ## Run locally

@@ -7,4 +7,4 @@ images:
   - name: ghcr.io/pei9564/finance-scraper-service
     newTag: sha-a000136
   - name: ghcr.io/pei9564/stt-ai-worker
-    newTag: sha-40611a9
+    newTag: sha-a41bffc
