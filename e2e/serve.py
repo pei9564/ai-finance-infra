@@ -74,10 +74,20 @@ def stt_app():
                     time.sleep(0.05)
             time.sleep(0.1)
             return TranscriptResult("en", 12.5, (TranscriptSegment(0, 12.5, TRANSCRIPT),))
-    return create_app(load_settings(), transcriber=FixtureTranscriber())
+    class FixtureNotes:
+        enabled = True
+        def chat(self, text, mode):
+            return {'summary': '營收成長 20%，需求持續強勁。',
+                    'minutes': '討論：營收與需求。\n決議：未提及。',
+                    'actions': '未提及明確待辦事項。'}[mode]
+    from dataclasses import replace
+    return create_app(replace(load_settings(), vllm_model='fixture-notes',
+        scraper_public_url=f'http://127.0.0.1:{SCRAPER_PORT}'),
+        transcriber=FixtureTranscriber(), notes_client=FixtureNotes())
 
 
 def scraper_app():
+    os.environ["STT_PUBLIC_URL"] = f"http://127.0.0.1:{STT_PORT}"
     from finance_scraper import server
     from finance_scraper.domain import AIConfig
     from finance_scraper.domain.config import SummaryProfile

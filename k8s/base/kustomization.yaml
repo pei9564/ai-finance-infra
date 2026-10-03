@@ -13,6 +13,7 @@ configMapGenerator:
     literals:
       - VLLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
       - VLLM_MODEL=gemini-2.5-flash
+      - STT_PUBLIC_URL=
       - STT_BASE_URL=http://stt-ai-worker:8000
       - LOOKBACK_DAYS=7
       - LLM_TIMEOUT_SECONDS=120
@@ -20,6 +21,11 @@ configMapGenerator:
       - MAX_STT_SUBMISSIONS=20
   - name: stt-config
     literals:
+      - VLLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+      - VLLM_MODEL=gemini-2.5-flash
+      - LLM_TIMEOUT_SECONDS=120
+      - SCRAPER_PUBLIC_URL=
+      - SCRAPER_PUBLIC_PORT=8080
       - MODEL=medium
       - DEVICE=cpu
       - COMPUTE_TYPE=int8

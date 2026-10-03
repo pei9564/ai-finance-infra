@@ -194,3 +194,35 @@ test('duplicate upload reuses completed transcript and exposes diagnostics', asy
   expect((await request.get('/diagnostics')).ok()).toBeTruthy();
   expect((await request.post('/transcribe_url', {form: {url:'https://fixture.invalid/x', batch_size:'17'}})).status()).toBe(422);
 });
+
+test('transcript AI notes persist independently and export all three formats', async ({page, request})=>{
+  await page.goto('/');const id=await upload(page,'notes-fixture','AI notes earnings');
+  await expect(page.locator('#result')).toHaveValue(transcript);
+  for(const [mode,text] of [['summary',summary],['minutes','討論：營收與需求。'],['actions','未提及明確待辦事項。']]){
+    await page.getByLabel('AI 整理方式').selectOption(mode);
+    await page.getByRole('button',{name:'產生整理',exact:true}).click();
+    await expect(page.locator('#notesText')).toContainText(text);
+    const exported=await request.get(`/job/${id}/notes/${mode}/export?format=json`);
+    expect(exported.ok()).toBeTruthy();expect((await exported.json()).text).toContain(text);
+    const download=page.waitForEvent('download');
+    await page.getByRole('link',{name:'下載整理 Markdown'}).click();
+    expect((await download).suggestedFilename()).toBe(`${mode}.md`);
+  }
+  expect((await (await request.get(`/job/${id}`)).json()).text).toBe(transcript);
+  expect((await request.post(`${control}/restart-stt`)).ok()).toBeTruthy();
+  await page.reload();
+  await expect(page.locator('#notesText')).toHaveText(summary);
+  await expect(page.getByRole('button',{name:'已產生',exact:true})).toBeDisabled();
+});
+
+test('media article opens its transcript and links back to Finance Brief',async({page})=>{
+  await page.goto(scraper);await page.getByRole('button',{name:'🎙️ 轉成文字',exact:true}).click();
+  await expect(page.locator('.card-body-preview')).toContainText(transcript);
+  await page.getByRole('link',{name:'開啟對應逐字稿 ↗'}).click();
+  await expect(page).toHaveURL(/\?job=/);
+  await expect(page.locator('#result')).toHaveValue(transcript);
+  await page.getByRole('link',{name:'開啟 Finance Brief ↗'}).click();
+  await expect(page.locator('.card-title')).toContainText('Fixture earnings');
+  await page.getByRole('link',{name:'開啟 Voice Notes ↗'}).click();
+  await expect(page.locator('#result')).toHaveValue(transcript);
+});

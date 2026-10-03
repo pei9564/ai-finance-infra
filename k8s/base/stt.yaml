@@ -42,6 +42,12 @@ spec:
             - configMapRef:
                 name: stt-config
           env:
+            - name: VLLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secrets
+                  key: VLLM_API_KEY
+                  optional: true
             - name: ALERT_WEBHOOK_URL
               valueFrom:
                 secretKeyRef:

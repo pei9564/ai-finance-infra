@@ -424,3 +424,9 @@ curl -X POST 'http://localhost:8000/maintenance/prune?days=7&dry_run=false'
 STT 任務列表可下載 JSON、Markdown、SRT；scraper 事件卡可下載 JSON、Markdown。匯出含來源、處理時間、模型資訊、翻譯前原文與截斷標記；舊資料缺少資訊時不推測補填。
 
 本次 overlay 指向 scraper `sha-036e8ec` 與 STT `sha-c3ba002`。部署前須先 push 兩個應用 repo，等 GHCR image build 成功，再 push infra；本地 commit 本身不會產生遠端 image。
+
+### AI 整理與兩個工作台的入口
+
+STT 的摘要／會議紀錄／待辦事項沿用 `VLLM_BASE_URL`、`VLLM_MODEL`、`VLLM_API_KEY`；Compose 已將這些設定傳入 STT，Kustomize 的 `stt-config` 也提供相同設定並引用 `app-secrets` 的 API key。修改 LLM 供應者時，請同步調整兩個服務的 ConfigMap。
+
+瀏覽器入口可在 `.env` 設定 `STT_PUBLIC_URL`、`SCRAPER_PUBLIC_URL`。留空時連到目前主機名稱搭配服務 port，因此以 Tailscale IP 開頁也會沿用該主機。Compose 會自動把 `SCRAPER_PORT` 傳給 STT 的返回連結；Kubernetes 使用不同 Ingress 網域／路徑時，請在對應 ConfigMap 設定完整 public URL。public URL 不含 API key，也不要填入叢集內部 DNS。

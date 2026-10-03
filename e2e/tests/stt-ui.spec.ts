@@ -24,6 +24,7 @@ async function fixture(page: Page) {
       json: job(new URL(r.request().url()).pathname.split("/").pop()!),
     }),
   );
+  await page.route('**/job/*/notes', r=>r.fulfill({json:{enabled:false,notes:{}}}));
   return errors;
 }
 

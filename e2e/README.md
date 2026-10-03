@@ -24,6 +24,8 @@ Coverage:
   jobs and corrupt local storage, upload progress/abort/error states, and opt-in
   completion notifications. Upload event timing uses a controlled transport;
   integration flows still exercise real multipart uploads.
+- All three transcript AI note types, independent exports and PG persistence
+  across an STT restart, plus article → transcript → reading workspace navigation.
 - Unexpected browser JavaScript exceptions fail the test.
 
 ## Run locally
