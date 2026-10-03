@@ -8,6 +8,12 @@
 應用統一透過 `make k8s-diff`／`make k8s-deploy` 部署。
 不再逐一 apply 舊的頂層 manifests，也不沿用舊的 containerd 覆寫與 Dashboard 安裝流程。
 
+## K3s 備份與還原
+
+已在 K3s 執行的系統，使用 [DB＋uploads 備份還原工具](backup-and-restore.md)：
+`make k8s-backup`／`make k8s-restore BACKUP_SOURCE=...`。
+下方手動流程僅供從 Compose 遷移至 K3s。
+
 ## Compose 資料遷移
 
 使用自己設定的資料庫使用者與名稱。先停掉會寫入資料的應用，再匯出資料庫；

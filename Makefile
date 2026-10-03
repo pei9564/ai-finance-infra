@@ -14,6 +14,9 @@ K8S_NAMESPACE := finance
 GPU_ADDON_DIR := $(ROOT)/k8s/addons/nvidia-device-plugin
 K8S_APP ?= finance-scraper-service
 PYTHON ?= python3
+BACKUP_DIR ?= $(ROOT)/backups/$(shell date -u +%Y%m%dT%H%M%SZ)
+BACKUP_SOURCE ?=
+RESTORE_REPLACE ?= 0
 CLUSTER_ARGS := --kubectl "$(KUBECTL)" --kubeconfig "$(KUBE_CONFIG)" --context "$(KUBE_CONTEXT)" --namespace "$(K8S_NAMESPACE)"
 KUBE := $(if $(KUBE_CONFIG),KUBECONFIG="$(KUBE_CONFIG)") $(KUBECTL) $(if $(KUBE_CONTEXT),--context "$(KUBE_CONTEXT)")
 SERVICES := postgres redis finance-scraper-service stt-ai-worker
@@ -67,7 +70,9 @@ help:
 	  'make k8s-gpu-install       Install the GPU plugin after runtime setup' \
 	  'make k8s-status            Show pods, services and persistent volumes' \
 	  'make k8s-logs              Follow app logs (K8S_APP=stt-ai-worker supported)' \
-	  'make k8s-forward           Open scraper on localhost:8080'
+	  'make k8s-forward           Open scraper on localhost:8080' \
+	  'make k8s-backup            Pause apps, back up DB/uploads, then resume' \
+	  'make k8s-restore           Restore BACKUP_SOURCE (RESTORE_REPLACE=1 to replace)'
 
 init:
 	@if [ -f "$(ENV_FILE)" ]; then \
@@ -176,3 +181,12 @@ k8s-gpu-install: k8s-target
 	@nodes="$$( $(KUBE) get nodes -l finance.node/role=gpu -o name )"; test -n "$$nodes" || { printf '%s\n' 'No GPU-labeled node found.' >&2; exit 1; }
 	@$(KUBE) apply -k "$(GPU_ADDON_DIR)"
 	@$(KUBE) -n kube-system rollout status daemonset/nvidia-device-plugin-daemonset --timeout=180s
+
+.PHONY: k8s-backup k8s-restore
+k8s-backup:
+	@$(PYTHON) "$(ROOT)/scripts/k8s_backup.py" $(CLUSTER_ARGS) --overlay "$(K8S_OVERLAY)" backup --directory "$(BACKUP_DIR)"
+
+k8s-restore:
+	@test -n "$(BACKUP_SOURCE)" || { printf '%s\n' 'Set BACKUP_SOURCE=/path/to/completed-backup.' >&2; exit 1; }
+	@test "$(RESTORE_REPLACE)" = 0 -o "$(RESTORE_REPLACE)" = 1 || { printf '%s\n' 'RESTORE_REPLACE must be 0 or 1.' >&2; exit 1; }
+	@$(PYTHON) "$(ROOT)/scripts/k8s_backup.py" $(CLUSTER_ARGS) --overlay "$(K8S_OVERLAY)" restore --directory "$(BACKUP_SOURCE)" $(if $(filter 1,$(RESTORE_REPLACE)),--replace-existing)

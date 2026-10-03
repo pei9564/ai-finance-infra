@@ -360,3 +360,15 @@ GPU allocatable 數量、NVIDIA RuntimeClass、local-path、應用 Secret 的鍵
 STT `9153e8917e9ff09014a101f967d4c1d5e1f9416e`。
 這是部署目標，不代表已發布；GHCR image 可用性仍需發布 CI／實際 pull 確認。
 SHA tag 依 CI 的版本慣例追蹤 commit；要完全綁定 image 內容，可改用 Kustomize images 的 `digest: sha256:...`。
+
+## 備份與還原操作
+
+```bash
+make k8s-backup
+make k8s-restore BACKUP_SOURCE=/path/to/completed-bundle
+```
+
+備份包含 DB 與 uploads，會暫停 app 後恢復原副本數；還原前先驗證完整性，
+預設拒絕覆寫非空目的端。只有明確要取代資料才加 `RESTORE_REPLACE=1`。
+還原失敗不會重啟 app。首次還原請先將目的 app 設為 0，避免預先初始化／恢復工作。
+完整流程、異地保存與失敗處理見 [備份與還原文件](docs/backup-and-restore.md)。
