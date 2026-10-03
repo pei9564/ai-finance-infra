@@ -5,12 +5,14 @@ MODE ?= registry
 DEVICE ?= cuda
 GHCR_USER ?= pei9564
 KUBECTL ?= kubectl
+# Honor exported KUBECONFIG; otherwise prefer the user's readable K3s copy.
+KUBE_CONFIG ?= $(if $(KUBECONFIG),$(KUBECONFIG),$(wildcard $(HOME)/.kube/finance-k3s.yaml))
 KUBE_CONTEXT ?=
 K8S_OVERLAY ?= homelab
 K8S_DIR := $(ROOT)/k8s/overlays/$(K8S_OVERLAY)
 K8S_NAMESPACE := finance
 K8S_APP ?= finance-scraper-service
-KUBE := $(KUBECTL) $(if $(KUBE_CONTEXT),--context "$(KUBE_CONTEXT)")
+KUBE := $(if $(KUBE_CONFIG),KUBECONFIG="$(KUBE_CONFIG)") $(KUBECTL) $(if $(KUBE_CONTEXT),--context "$(KUBE_CONTEXT)")
 SERVICES := postgres redis finance-scraper-service stt-ai-worker
 APPS := finance-scraper-service stt-ai-worker
 
@@ -56,6 +58,7 @@ help:
 	  'make k8s-render            Render homelab manifests (K8S_OVERLAY=cpu supported)' \
 	  'make k8s-check             Check both Kustomize overlays without a cluster' \
 	  'make k8s-diff / k8s-deploy Preview / apply to the selected Kubernetes context' \
+	  'make k8s-target            Show context/API server (KUBE_CONFIG=/path supported)' \
 	  'make k8s-status            Show pods, services and persistent volumes' \
 	  'make k8s-logs              Follow app logs (K8S_APP=stt-ai-worker supported)' \
 	  'make k8s-forward           Open scraper on localhost:8080'
@@ -123,20 +126,24 @@ e2e:
 	@cd "$(ROOT)/e2e" && npm test
 
 # These targets do not use Compose .env. App secrets are provisioned separately.
-.PHONY: k8s-render k8s-check k8s-diff k8s-deploy k8s-status k8s-logs k8s-forward
+.PHONY: k8s-render k8s-check k8s-target k8s-diff k8s-deploy k8s-status k8s-logs k8s-forward
 k8s-render:
-	@$(KUBECTL) kustomize "$(K8S_DIR)"
+	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(K8S_DIR)"
 
 k8s-check:
-	@$(KUBECTL) kustomize "$(ROOT)/k8s/overlays/homelab" > /dev/null
-	@$(KUBECTL) kustomize "$(ROOT)/k8s/overlays/cpu" > /dev/null
-	@$(KUBECTL) kustomize "$(ROOT)/k8s/optional/vllm-external" > /dev/null
+	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(ROOT)/k8s/overlays/homelab" > /dev/null
+	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(ROOT)/k8s/overlays/cpu" > /dev/null
+	@KUBECONFIG=/dev/null $(KUBECTL) kustomize "$(ROOT)/k8s/optional/vllm-external" > /dev/null
 	@printf '%s\n' 'Kustomize configurations render successfully (offline check).'
 
-k8s-diff:
+k8s-target:
+	@$(KUBE) config view --minify -o 'jsonpath=Context: {.contexts[0].name}{"\n"}API server: {.clusters[0].cluster.server}{"\n"}'
+	@printf '%s\n' 'Overlay: $(K8S_OVERLAY) / Namespace: $(K8S_NAMESPACE)'
+
+k8s-diff: k8s-target
 	@$(KUBE) diff -k "$(K8S_DIR)"
 
-k8s-deploy:
+k8s-deploy: k8s-target
 	@$(KUBE) apply -k "$(K8S_DIR)"
 
 k8s-status:

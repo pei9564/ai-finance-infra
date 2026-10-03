@@ -15,6 +15,18 @@
 所有 make 指令在 infra repo 執行。以下 kubectl 指令都使用已設定的 kubeconfig／context；
 可用 `make ... KUBE_CONTEXT=<context>` 指定 Makefile 目標的叢集。
 
+Makefile 的 kubeconfig 選擇順序：明確的 `KUBE_CONFIG=/path` → 已 export 的 `KUBECONFIG`
+→ 存在的 `$HOME/.kube/finance-k3s.yaml` → kubectl 預設。
+不會自動複製或改變 `/etc/rancher/k3s/k3s.yaml` 的權限。
+`diff`／`deploy` 執行前都會顯示 context、API server 與 overlay；`k8s-target` 可單獨查看。
+
+```bash
+make k8s-target KUBE_CONFIG="$HOME/.kube/finance-k3s.yaml"
+make k8s-deploy KUBE_CONFIG="$HOME/.kube/finance-k3s.yaml" KUBE_CONTEXT=<context>
+```
+
+原生 kubectl 指令仍需 export KUBECONFIG 或使用自己的 `--kubeconfig`。
+
 ```bash
 kubectl config current-context
 kubectl label node <A-node-name> finance.node/role=data --overwrite

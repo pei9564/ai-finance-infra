@@ -289,7 +289,11 @@ kubectl -n finance port-forward service/stt-ai-worker 8001:8000
 
 ### 7. 日常操作與排查
 
-新終端機也要設定同一份 `KUBECONFIG`。要指定其內的 context，可帶 `KUBE_CONTEXT=<context>`。
+Makefile 會優先使用 `KUBE_CONFIG=/path`、已 export 的 `KUBECONFIG`，
+否則使用存在的 `$HOME/.kube/finance-k3s.yaml`，最後才用 kubectl 預設。
+因此個人副本建立後，可直接 `make k8s-deploy`；原生 kubectl 指令仍需設定 `KUBECONFIG`。
+部署前會顯示目標，也可用 `make k8s-target` 先查看。
+指定 context 可帶 `KUBE_CONTEXT=<context>`。
 
 | 指令／狀況 | 用途／檢查方式 |
 |---|---|
