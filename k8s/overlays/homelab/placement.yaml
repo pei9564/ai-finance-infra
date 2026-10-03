@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: finance
+spec:
+  template:
+    spec:
+      nodeSelector:
+        finance.node/role: data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finance-scraper-service
+  namespace: finance
+spec:
+  template:
+    spec:
+      nodeSelector:
+        finance.node/role: data
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stt-ai-worker
+  namespace: finance
+spec:
+  template:
+    spec:
+      nodeSelector:
+        finance.node/role: gpu

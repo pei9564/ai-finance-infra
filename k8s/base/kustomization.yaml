@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: finance
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - redis.yaml
+  - scraper.yaml
+  - stt.yaml
+# Hash suffixes update Deployment references when configuration changes.
+configMapGenerator:
+  - name: scraper-config
+    literals:
+      - VLLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+      - VLLM_MODEL=gemini-2.5-flash
+      - STT_BASE_URL=http://stt-ai-worker:8000
+      - LOOKBACK_DAYS=7
+  - name: stt-config
+    literals:
+      - MODEL=medium
+      - DEVICE=cpu
+      - COMPUTE_TYPE=int8
+      - BATCH_SIZE=4
+      - LANGUAGE=zh

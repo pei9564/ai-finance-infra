@@ -1,0 +1,47 @@
+name: Kustomize validation
+
+on:
+  push:
+    paths:
+      - 'k8s/**'
+      - 'Makefile'
+      - '.github/workflows/kustomize.yml'
+  pull_request:
+    paths:
+      - 'k8s/**'
+      - 'Makefile'
+      - '.github/workflows/kustomize.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned validation tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_dir=$(mktemp -d)
+          cd "$tool_dir"
+          curl -fsSLo kubectl https://dl.k8s.io/release/v1.35.5/bin/linux/amd64/kubectl
+          curl -fsSLo kubectl.sha256 https://dl.k8s.io/release/v1.35.5/bin/linux/amd64/kubectl.sha256
+          printf '%s  kubectl\n' "$(cat kubectl.sha256)" | sha256sum --check
+          curl -fsSLO https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz
+          curl -fsSLO https://github.com/yannh/kubeconform/releases/download/v0.8.0/CHECKSUMS
+          sha256sum --check --ignore-missing CHECKSUMS
+          tar -xzf kubeconform-linux-amd64.tar.gz kubeconform
+          chmod +x kubectl kubeconform
+          printf '%s\n' "$tool_dir" >> "$GITHUB_PATH"
+      - name: Render and validate Kubernetes schemas
+        shell: bash
+        run: |
+          set -euo pipefail
+          make k8s-check
+          for config in k8s/overlays/homelab k8s/overlays/cpu k8s/optional/vllm-external; do
+            kubectl kustomize "$config" | kubeconform -strict -summary -kubernetes-version 1.35.0
+          done

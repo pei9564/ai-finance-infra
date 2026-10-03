@@ -1,0 +1,9 @@
+# Remove GPU reservations when make is invoked with DEVICE=cpu.
+services:
+  stt-ai-worker:
+    environment:
+      DEVICE: cpu
+    deploy:
+      resources:
+        reservations:
+          devices: !reset []

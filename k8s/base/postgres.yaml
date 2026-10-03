@@ -1,6 +1,6 @@
 # PostgreSQL — StatefulSet + Headless Service
 # 使用 K3s 內建的 local-path provisioner，資料存在本機磁碟。
-# 單節點時 Pod 重啟資料不會遺失；多節點後若需跨節點漂移再考慮 Longhorn。
+# PVC 綁定原節點磁碟；跨節點恢復需另外規劃資料備份／還原。
 
 apiVersion: v1
 kind: Service
@@ -57,7 +57,7 @@ spec:
               mountPath: /var/lib/postgresql/data
           readinessProbe:
             exec:
-              command: ["pg_isready", "-U", "admin", "-d", "finance_db"]
+              command: ["sh", "-c", 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
             initialDelaySeconds: 5
             periodSeconds: 5
           resources:

@@ -4,14 +4,18 @@
 # 想 hot-edit 各 repo 的 config / 程式,免去每次都 rebuild image。
 #
 # 使用:
-#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#   make up MODE=dev
+#   make up MODE=dev DEVICE=cpu
 #
 # 純 image 部署 (production / try-it-out) 不要套這份,只跑 docker-compose.yml 即可。
 services:
   finance-scraper-service:
     volumes:
+      - ../finance-scraper-service/src:/app/src:ro
       # mount sibling repo 的 config 覆寫 image 內建 yaml,改設定不用 rebuild
       - ../finance-scraper-service/config:/app/config:ro
+
+    command: ["uvicorn", "finance_scraper.server:app", "--host", "0.0.0.0", "--port", "8080", "--reload", "--reload-dir", "/app/src"]
 
   stt-ai-worker:
     volumes:

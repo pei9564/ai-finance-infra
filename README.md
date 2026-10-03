@@ -32,7 +32,7 @@
 
 ```mermaid
 flowchart TB
-    subgraph host["host (single node, K3s Cluster)"]
+    subgraph host["K3s Cluster (data + GPU nodes)"]
         subgraph k8s["finance namespace"]
             scraper["finance-scraper-service<br/>(Deployment, svc:8080)"]
             stt["stt-ai-worker<br/>(Deployment, GPU, svc:8000)"]
@@ -45,7 +45,7 @@ flowchart TB
     scraper -- "PG_DSN" --> pg
     stt -- "DB_URL" --> pg
     redis -. "預留，應用尚未使用" .-> scraper
-    scraper -- "VLLM_BASE_URL<br/>(host.docker.internal)" --> vllm
+    scraper -- "VLLM_BASE_URL<br/>(external API)" --> vllm
     scraper -- "STT_BASE_URL<br/>(internal DNS)" --> stt
 ```
 
@@ -80,38 +80,60 @@ flowchart TB
 - `docker login ghcr.io` (拉 private image 必要)
 
 ```bash
-# 1. 設定環境變數 (整套系統的單一設定來源)
-cp .env.example .env
-# 至少要填 POSTGRES_PASSWORD 與 GITHUB_TOKEN
-
-# 2. 登入 registry 拉 private image
-echo $GHCR_PAT | docker login ghcr.io -u <username> --password-stdin
-
-# 3. 起整套
-docker compose up -d
-docker compose ps
+cd ai-finance-infra
+make init       # 已有 .env 時不覆寫
+# 編輯 .env：POSTGRES_PASSWORD、GITHUB_TOKEN、LLM endpoint / model / API key
+make login      # private GHCR image 才需要，登入提示時貼上可讀 packages 的 PAT
+make up         # 拉已發布 image，啟動 PostgreSQL、Redis、scraper、STT
 ```
 
-驗證點:
-- `http://localhost:8080/docs` — scraper OpenAPI
-- `http://localhost:8001` — STT UI
-- `docker compose logs watchtower` — 30 秒 poll 一次 GHCR
+預設 `MODE=registry DEVICE=cuda`。`make up` 會拉取 `.env` 的 `SCRAPER_IMAGE` / `STT_IMAGE`，並更新 image 已改變的 container。Makefile 的 `DEVICE` 決定 STT 裝置，優先於 `.env` 的 `STT_DEVICE`；CPU 啟動用 `make up DEVICE=cpu`，同時移除 NVIDIA device reservation。
 
-### 本地開發 (sibling repo hot-edit)
+入口：scraper <http://localhost:8080>（可用 `SCRAPER_PORT` 調整），STT <http://localhost:8001>。首次載入 Whisper 會下載模型，請用 `make logs` 查看進度。
 
-同時 clone `finance-scraper-service` / `stt-ai-worker` 到 sibling 路徑時,套上 dev override 可以 mount scraper config 進去免 rebuild:
+LLM gateway 維持外部服務，由 `.env` 的 `VLLM_BASE_URL` 連接本地 vLLM 或雲端相容 API；`make up` 不會啟動模型 gateway。
+
+| 指令 | 用途 |
+|---|---|
+| `make help` | 列出所有指令 |
+| `make images` | 查看選用 image 名稱，不顯示 credentials |
+| `make update` | 拉取 image 並套用更新 |
+| `make ps` / `make logs` | 查看服務狀態 / 持續追蹤 log |
+| `make down` | 關閉服務，保留 PG 與上傳音檔 volumes |
+| `make config` | 驗證 Compose 設定，不輸出 secrets |
+| `make auto-update` | 額外啟動 Watchtower（需 Docker registry 登入資訊） |
+| `make e2e-setup` / `make e2e` | 安裝 / 執行隔離的 Playwright 測試 |
+
+Watchtower 預設不由 `make up` 啟動；要自動更新才另外執行 `make auto-update`。Redis 雖尚未被應用使用，仍隨核心服務啟動。
+
+### Image registry
+
+兩個 application repo 的 `.github/workflows/docker-publish.yml` 已設定 GitHub Container Registry（GHCR）：
+
+- `ghcr.io/pei9564/finance-scraper-service:latest`
+- `ghcr.io/pei9564/stt-ai-worker:latest`
+
+可在 [GitHub Packages](https://github.com/pei9564?tab=packages) 查看已發布的 package 與版本。這裡是 CI 設定的目標；本地 commit 尚未 push 時，registry 不會含有那些修正。
+
+推送 application repo 的 `main` 並通過 CI 後會 build / push `latest`，也產生 `sha-<短 SHA>` tag；`v*.*.*` tag 會產生對應版本 image。infra repo 管部署，沒有自己的 application image。
+
+### 本地程式與開發模式
+
+三個 repo 在同層時，可直接 build 目前程式，不必先 push 或登入 GHCR：
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+make up MODE=local              # build 兩個 application，再啟動整套
+make up MODE=local DEVICE=cpu   # CPU 模式
+make up MODE=dev DEVICE=cpu     # 另掛載 scraper src/config 與 STT app，開 reload
 ```
 
-純 image 部署 (production / try-it-out) 不要套這份。
+local / dev image 使用本地 tag，Watchtower label 關閉。後續的 `logs`、`ps`、`down` 等指令請帶相同的 `MODE` / `DEVICE`。`make build` 可單獨 build 本地 application image。Makefile 以自身所在目錄解析路徑，支援 `make -C /path/to/ai-finance-infra ...`。
 
 ---
 
 ## Compose 自動部署 (watchtower)
 
-此機制只適用 Compose；K3s 不會由 watchtower 更新。K3s 更新請套用新 image tag 的 manifest，或在推送 `latest` 後執行 `kubectl rollout restart deployment/finance-scraper-service deployment/stt-ai-worker -n finance`。
+此機制只適用 Compose；K3s 不會由 watchtower 更新。K3s 更新請修改 overlay 的固定 image tag，再執行 `make k8s-diff`／`make k8s-deploy`。
 
 scraper 與 stt 兩個 service 貼了 `com.centurylinklabs.watchtower.enable=true` label。流程:
 
@@ -123,58 +145,170 @@ DB / Redis **沒貼 label**,不會被動;要 pin 版本就把 `.env` 的 image t
 
 ---
 
-## 部署演進
+## K3s／Kustomize：實際執行流程
 
-| 階段 | 狀態 | 描述 |
-|---|---|---|
-| 單節點 K3s | 🟢 Running | **目前的正式運行環境**，資源控管與 GPU 分配更精準 |
-| 單機 docker-compose | 🟡 Dev-only | 退役並轉為本地開發用，保留 `docker-compose.yml` |
-| 多節點 K3s on home lab | ⚪ Planned | 其餘節點就緒後以 `k3s agent` 加入叢集 |
+以下部署的是兩台電腦組成的同一個叢集：A 跑 PostgreSQL／scraper，B 跑 GPU STT。
+**應用部署只在一台管理電腦執行一次，不需要兩台各跑一次 Makefile。**
+管理電腦可以是 A，也可以是加入相同 Tailscale tailnet 的筆電。
+`make up` 啟動的是 Docker Compose；K3s 請使用 `make k8s-deploy`。
 
-### K3s 部署 (單節點)
+### 1. 先確認 K3s 是否已建立
 
-> **完整教學與踩坑紀錄請參考：[docs/k3s-setup-draft.md](docs/k3s-setup-draft.md)**
+- **還沒安裝 K3s，或 B 還沒加入**：先完成 [K3s＋Tailscale 兩節點安裝](docs/k3s-tailscale-setup.md)，再回到下面步驟。
+- **已經有 K3s**：使用現有 kubeconfig，確認兩台節點 Ready，且 B 已安裝 NVIDIA runtime／device plugin。
+- **原本已有資料**：先依 [遷移說明](docs/k3s-setup-draft.md) 備份與還原；不要把以下首次部署流程當作資料搬移工具。
+
+以下指令在管理電腦執行，工作目錄是 `ai-finance-infra`：
 
 ```bash
-# 1. 安裝 K3s
-curl -sfL https://get.k3s.io | sh -
-
-# 2. 安裝 NVIDIA device plugin (GPU 節點需要)
-sudo k3s kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.17.0/deployments/static/nvidia-device-plugin.yml
-
-# 3. 建立 namespace + secrets
-sudo k3s kubectl apply -f k8s/namespace.yaml
-cp k8s/secrets.yaml.example k8s/secrets.yaml   # 填入真實值
-sudo k3s kubectl apply -f k8s/secrets.yaml
-sudo k3s kubectl create secret docker-registry ghcr-cred \
-  --docker-server=ghcr.io --docker-username=pei9564 \
-  --docker-password=<GHCR_PAT> -n finance
-
-# 4. 部署基礎設施
-sudo k3s kubectl apply -f k8s/postgres.yaml
-sudo k3s kubectl apply -f k8s/redis.yaml
-sudo k3s kubectl apply -f k8s/vllm-external.yaml   # 記得改 Host IP
-
-# 5. (可選) 從 Docker Compose 遷移 PG 資料
-docker compose exec postgres pg_dump -U admin -d finance_db -Fc -f /tmp/dump.sql
-docker compose cp postgres:/tmp/dump.sql ./finance_db.dump
-sudo k3s kubectl wait --for=condition=ready pod -l app=postgres -n finance --timeout=60s
-sudo k3s kubectl cp ./finance_db.dump finance/postgres-0:/tmp/dump.sql
-sudo k3s kubectl exec -n finance postgres-0 -- pg_restore -U admin -d finance_db --clean --if-exists /tmp/dump.sql
-
-# 6. 部署應用
-sudo k3s kubectl apply -f k8s/scraper.yaml
-sudo k3s kubectl apply -f k8s/stt.yaml
-
-# 7. 驗證
-sudo k3s kubectl get pods -n finance
-
-# 8. Port forward 測試
-sudo k3s kubectl port-forward svc/finance-scraper-service 8080:8080 -n finance
-sudo k3s kubectl port-forward svc/stt-ai-worker 8001:8000 -n finance
+cd ai-finance-infra
 ```
 
-K3s 落地後 docker-compose 仍保留作為本地開發環境。
+若管理電腦就是 A，可先複製 K3s 的管理設定，不必放寬原檔權限：
+
+```bash
+mkdir -p "$HOME/.kube"
+sudo install -m 600 -o "$(id -u)" -g "$(id -g)" \
+  /etc/rancher/k3s/k3s.yaml "$HOME/.kube/finance-k3s.yaml"
+```
+
+這個複製指令會覆寫目的檔，僅用於第一次建立該 kubeconfig。
+遠端管理電腦請依安裝文件安全取得 kubeconfig，並將 API 位址改為 A 的 Tailscale IP。
+已有個人 kubeconfig 可跳過複製。準備好後再設定路徑與檢查叢集：
+
+```bash
+# 改成自己的 kubeconfig 路徑；後續 kubectl 和 make 都使用這份設定
+export KUBECONFIG="$HOME/.kube/finance-k3s.yaml"
+kubectl config current-context
+kubectl get nodes -o wide
+kubectl get storageclass local-path
+kubectl get runtimeclass nvidia
+```
+
+看到 `permission denied /etc/rancher/k3s/k3s.yaml` 時，使用上述個人副本及 `KUBECONFIG`。
+
+### 2. 指定 A／B 的工作角色
+
+先用 `kubectl get nodes` 查實際節點名稱。若依安裝文件建立，名稱就是 finance-data／finance-gpu：
+
+```bash
+kubectl label node finance-data finance.node/role=data --overwrite
+kubectl label node finance-gpu finance.node/role=gpu --overwrite
+kubectl get nodes -L finance.node/role
+kubectl get node finance-gpu -o jsonpath='{.status.allocatable.nvidia\.com/gpu}{"\n"}'
+```
+
+如果名稱不同，替換上述兩個名稱。最後一個指令應顯示至少 `1`；
+空白代表 GPU 尚未被 device plugin 提供，先完成 GPU 設定再部署。
+
+### 3. 建立應用 Secrets
+
+K3s 使用 Kubernetes Secrets，**不會讀取 Compose 的 `.env`**。
+
+```bash
+kubectl apply -f k8s/base/namespace.yaml
+test -f k8s/secrets.yaml || cp k8s/secrets.yaml.example k8s/secrets.yaml
+nano k8s/secrets.yaml
+```
+
+填入 `POSTGRES_USER`、`POSTGRES_PASSWORD`、`POSTGRES_DB`、`GITHUB_TOKEN`、`VLLM_API_KEY`，
+移除範本 credentials，存檔後套用：
+
+```bash
+kubectl apply -f k8s/secrets.yaml
+```
+
+預設 LLM 是 Gemini 相容 API；使用本地 vLLM 時，依 [環境調整說明](k8s/README.md#環境調整)
+修改 endpoint／model。真實 `secrets.yaml` 已被 Git 忽略。
+
+### 4. 讓叢集能拉 GHCR images
+
+本機的 `make login`／`docker login` 不會自動讓 K3s 登入。
+使用具有讀取對應 packages 權限的 PAT，在管理電腦建立專用 pull Secret：
+
+```bash
+registry_config=$(mktemp -d)
+docker --config "$registry_config" login ghcr.io --username pei9564
+# 登入成功後再繼續；提示 Password 時輸入 PAT
+kubectl -n finance create secret generic ghcr-cred \
+  --type=kubernetes.io/dockerconfigjson \
+  --from-file=.dockerconfigjson="$registry_config/config.json" \
+  --dry-run=client -o yaml | kubectl apply -f -
+rm -rf "$registry_config"
+```
+
+這一步需要管理電腦有 Docker CLI。若 Docker config 使用 credential helper，
+請依 [pull Secret 說明](k8s/README.md#前置設定) 處理完整的 registry credential。
+
+### 5. 選定版本、預覽並部署
+
+從 [GitHub Packages](https://github.com/pei9564?tab=packages) 查兩個 app 已發布的版本，
+編輯以下檔案的兩個 `images[].newTag`，將 `latest` 改成實際的 `sha-...` tag：
+
+```bash
+nano k8s/overlays/homelab/kustomization.yaml
+make k8s-check
+make k8s-render
+make k8s-diff
+```
+
+兩個 repo 使用各自的 tag，不必相同。本地修改必須先 push 到 application repo 並通過發布 CI，
+才能從 GHCR 拉到新程式；infra 設定不需要製作 image。
+`kubectl diff` 有差異時回傳 1，Make 可能顯示 `Error 1`，請確認輸出內容；
+若是連線、權限或資源驗證錯誤，先修正再部署。
+
+確認目標叢集及差異後：
+
+```bash
+make k8s-deploy
+kubectl -n finance rollout status statefulset/postgres --timeout=180s
+kubectl -n finance rollout status deployment/finance-scraper-service --timeout=180s
+kubectl -n finance rollout status deployment/stt-ai-worker --timeout=2100s
+make k8s-status
+```
+
+首次 Whisper 下載／載入可能需要較久。另開終端機可執行
+`make k8s-logs K8S_APP=stt-ai-worker` 查看進度。
+
+### 6. 開啟網頁
+
+```bash
+make k8s-forward
+```
+
+保持該終端機執行，在**管理電腦**瀏覽器開啟 <http://localhost:8080>。
+STT 網頁需要另外開一個終端機執行：
+
+```bash
+export KUBECONFIG="$HOME/.kube/finance-k3s.yaml"
+kubectl -n finance port-forward service/stt-ai-worker 8001:8000
+```
+
+再開啟 <http://localhost:8001>。按 Ctrl+C 只會停止 port-forward，不會關閉叢集服務。
+目前入口使用 port-forward；固定的 tailnet 網址可之後再加 Tailscale Operator。
+
+### 7. 日常操作與排查
+
+新終端機也要設定同一份 `KUBECONFIG`。要指定其內的 context，可帶 `KUBE_CONTEXT=<context>`。
+
+| 指令／狀況 | 用途／檢查方式 |
+|---|---|
+| `make k8s-status` | 查看 Pod、Service、PVC 與節點位置 |
+| `make k8s-logs` | scraper logs |
+| `make k8s-logs K8S_APP=stt-ai-worker` | STT logs |
+| 更新版本 | 修改 overlay 的 image tag，再 diff／deploy |
+| `Pending` | `kubectl -n finance describe pod <pod-name>`；檢查 labels、GPU、PVC node affinity／容量 |
+| `ImagePullBackOff` | 檢查 image tag 是否已發布、ghcr-cred 權限與 Secret namespace |
+| `CrashLoopBackOff` | `kubectl -n finance logs <pod-name> --previous`，查看前一次啟動錯誤 |
+| DB／STT 連線逾時 | 依 [跨節點驗證指令](docs/k3s-tailscale-setup.md#4-管理電腦的-kubeconfig) 檢查 Tailscale／Flannel |
+
+CPU 測試在獨立測試叢集使用 `K8S_OVERLAY=cpu`，不需 GPU／節點角色 labels；
+namespace、Secrets 與 images 設定步驟相同，image tags 請修改 cpu overlay。
+不要直接切換已有 GPU uploads PVC 的正式叢集。
+
+完整設定與儲存限制見 [Kustomize 部署文件](k8s/README.md)。
+A 是控制平面／DB 單點，local-path PVC 綁定原節點，Tailscale 不複製磁碟資料。
+目前完成的是設定與離線驗證，兩台機器仍需實際安裝、部署及驗證。
 
 ---
 

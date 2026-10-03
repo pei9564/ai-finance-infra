@@ -1,118 +1,54 @@
-# K3s 單節點部署與遷移筆記 (Draft)
+# K3s 部署文件
 
-> 這份文件記錄了從 Docker Compose 遷移至 K3s 單節點，並且開啟 GPU 支援、部署 K8s Dashboard 的完整流程。
+原本的單節點草稿已由以下文件取代：
 
-## 1. 備份原有資料與關閉 Compose
+- [K3s＋Tailscale 兩節點安裝](k3s-tailscale-setup.md)
+- [Kustomize 應用部署、儲存與遷移](../k8s/README.md)
 
-因為 K3s 會跑在同樣的 Port 上（例如 Postgres 5432），要先暫停原來的服務：
+應用統一透過 `make k8s-diff`／`make k8s-deploy` 部署。
+不再逐一 apply 舊的頂層 manifests，也不沿用舊的 containerd 覆寫與 Dashboard 安裝流程。
 
-```bash
-# 從 Docker 裡的 Postgres 匯出資料庫
-docker compose exec postgres pg_dump -U admin -d finance_db -Fc -f /tmp/dump.sql
-docker compose cp postgres:/tmp/dump.sql ./finance_db.dump
+## Compose 資料遷移
 
-# 停掉 Docker Compose
-docker compose down
-```
-
-## 2. 安裝 K3s 與開啟 GPU 支援
-
-K3s 預設的 containerd 不認得 NVIDIA 驅動，我們需要覆寫預設引擎，並且幫 K8s 註冊 NVIDIA 的 RuntimeClass：
+使用自己設定的資料庫使用者與名稱。先停掉會寫入資料的應用，再匯出資料庫；
+以下從容器環境讀取 POSTGRES_USER／POSTGRES_DB，不會列出密碼：
 
 ```bash
-# 安裝 K3s
-curl -sfL https://get.k3s.io | sh -
-
-# 建立 K3s 的 containerd 外掛設定資料夾
-sudo mkdir -p /var/lib/rancher/k3s/agent/etc/containerd/config.toml.d/
-
-# 寫入強制把預設容器引擎 (runc) 替換為 nvidia 的設定
-sudo bash -c 'cat <<EOF > /var/lib/rancher/k3s/agent/etc/containerd/config.toml.d/00-default-nvidia.toml
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
-  runtime_type = "io.containerd.runc.v2"
-[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
-  BinaryName = "/usr/bin/nvidia-container-runtime"
-EOF'
-
-# 重啟 K3s 讓設定生效
-sudo systemctl restart k3s
-
-# 安裝 NVIDIA K8s device plugin
-sudo k3s kubectl apply -f https://raw.githubusercontent.com/NVIDIA/k8s-device-plugin/v0.17.0/deployments/static/nvidia-device-plugin.yml
-
-# 註冊 NVIDIA RuntimeClass
-sudo bash -c 'cat <<EOF | sudo k3s kubectl apply -f -
-apiVersion: node.k8s.io/v1
-kind: RuntimeClass
-metadata:
-  name: nvidia
-handler: nvidia
-EOF'
-
-# 關鍵一步：更新 NVIDIA device plugin 讓它也使用 nvidia 通道，否則它自己會看不到實體 GPU
-sudo k3s kubectl patch ds nvidia-device-plugin-daemonset -n kube-system -p '{"spec": {"template": {"spec": {"runtimeClassName": "nvidia"}}}}'
+docker compose stop finance-scraper-service stt-ai-worker
+docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > finance_db.dump
 ```
 
-## 3. 部署基礎設施與機密資料
+確認 dump 成功且非空，再備份 uploads；`make stop` 可停止其餘容器並保留 volumes。
+若使用 local／dev Compose 模式，以上 Docker Compose 指令需帶上相同 override files。
+
+在目的叢集建立 namespace、Secrets 後，先在選定 overlay 的 `kustomization.yaml`
+暫時加入以下設定，確保還原期間應用不會先啟動或恢復工作：
+
+```yaml
+replicas:
+  - name: finance-scraper-service
+    count: 0
+  - name: stt-ai-worker
+    count: 0
+```
 
 ```bash
-# 建立 namespace 與套用 secrets
-sudo k3s kubectl apply -f k8s/namespace.yaml
-sudo k3s kubectl apply -f k8s/secrets.yaml
-
-# 建立拉取 GHCR 映像檔的憑證 (替換為真實 PAT)
-sudo k3s kubectl create secret docker-registry ghcr-cred \
-  --docker-server=ghcr.io --docker-username=pei9564 \
-  --docker-password=<YOUR_GHCR_PAT> \
-  -n finance --dry-run=client -o yaml | sudo k3s kubectl apply -f -
-
-# 部署基礎設施
-sudo k3s kubectl apply -f k8s/postgres.yaml
-sudo k3s kubectl apply -f k8s/redis.yaml
-sudo k3s kubectl apply -f k8s/vllm-external.yaml
+make k8s-diff
+make k8s-deploy
+kubectl -n finance rollout status statefulset/postgres --timeout=180s
+kubectl -n finance cp finance_db.dump postgres-0:/tmp/finance_db.dump
 ```
 
-## 4. 還原資料庫
+以下還原會覆寫目的資料庫已有物件，只對預定的遷移目的 DB 執行：
 
 ```bash
-# 等待 Postgres Pod 啟動
-sudo k3s kubectl wait --for=condition=ready pod -l app=postgres -n finance --timeout=120s
-
-# 把第一步備份的 dump 檔倒進去
-sudo k3s kubectl cp ./finance_db.dump finance/postgres-0:/tmp/dump.sql
-sudo k3s kubectl exec -n finance postgres-0 -- pg_restore -U admin -d finance_db --clean --if-exists /tmp/dump.sql
+kubectl -n finance exec postgres-0 -- sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists /tmp/finance_db.dump'
 ```
 
-## 5. 部署應用程式
+STT 未完成工作的來源可能指向 `/data/uploads`，所以 DB dump 之外，
+也要在停機狀態備份／還原 Compose uploads volume 到 B 的 PVC，保留檔名與路徑。
+請用暫時的維護 Pod（排到 B，掛載 stt-uploads PVC）完成還原，並確認檔案權限。
+只還原 DB 不足以恢復上傳工作。
 
-```bash
-sudo k3s kubectl apply -f k8s/scraper.yaml
-sudo k3s kubectl apply -f k8s/stt.yaml
-
-# 檢查 Pod 狀態
-sudo k3s kubectl get pods -n finance
-```
-
-> **避坑指南 (Rolling Update 資源死鎖)**：
-> 單節點只有 1 張顯卡時，如果在 `stt.yaml` 使用預設的 `RollingUpdate`，更新時 K8s 會試圖同時開舊 Pod 與新 Pod，導致新 Pod 因為搶不到顯卡卡死在 `Pending`。
-> 解決方法是在 Deployment 中加上 `strategy: type: Recreate`，讓 K8s 先殺掉舊的、再開新的，確保顯卡能順利釋放與重新分配。
-
-## 6. 部署 Kubernetes Dashboard
-
-圖形化管理介面，包含建立管理員權限：
-
-```bash
-# 部署官方 Dashboard
-sudo k3s kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
-
-# 套用 admin-user 權限綁定 (檔案: k8s/dashboard-admin.yaml)
-sudo k3s kubectl apply -f k8s/dashboard-admin.yaml
-
-# 產生登入用的 Token (複製印出來的亂碼)
-sudo k3s kubectl -n kubernetes-dashboard create token admin-user
-
-# 開啟 proxy 讓外部可以連線
-sudo k3s kubectl proxy
-```
-
-進入 Dashboard：打開瀏覽器訪問 `http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/`，選擇 Token 登入。
+音訊與 DB 還原完成後，移除暫時的 `replicas` 設定，再執行 `make k8s-diff`／`make k8s-deploy`。
+確認應用、舊資料與工作恢復正常後，才處理原有 Compose 資源。

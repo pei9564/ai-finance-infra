@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stt-ai-worker
+  namespace: finance
+spec:
+  template:
+    spec:
+      runtimeClassName: nvidia
+      containers:
+        - name: stt
+          resources:
+            limits:
+              nvidia.com/gpu: 1

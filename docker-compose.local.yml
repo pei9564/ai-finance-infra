@@ -1,0 +1,18 @@
+# Build application images from sibling repos, without requiring GHCR access.
+# Used automatically by make up MODE=local and MODE=dev.
+services:
+  finance-scraper-service:
+    image: finance-scraper-service:local
+    build:
+      context: ../finance-scraper-service
+    pull_policy: build
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
+
+  stt-ai-worker:
+    image: stt-ai-worker:local
+    build:
+      context: ../stt-ai-worker
+    pull_policy: build
+    labels:
+      com.centurylinklabs.watchtower.enable: "false"
