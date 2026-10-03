@@ -79,8 +79,6 @@ spec:
                   key: POSTGRES_DB
             - name: PG_DSN
               value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
-            - name: REDIS_URL
-              value: "redis://redis:6379/0"
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:
@@ -91,12 +89,25 @@ spec:
                 secretKeyRef:
                   name: app-secrets
                   key: VLLM_API_KEY
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            periodSeconds: 15
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
-              path: /docs
+              path: /readyz
               port: 8080
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5
           resources:
             requests:
               cpu: 100m

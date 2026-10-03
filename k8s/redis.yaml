@@ -1,5 +1,5 @@
 # Redis — Deployment + Service
-# Redis 在這個系統裡主要做任務佇列，資料可接受遺失，不需要 PVC。
+# 應用目前未使用 Redis；保留給未來擴充，不承載 STT 任務。
 
 apiVersion: v1
 kind: Service

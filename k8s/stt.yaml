@@ -73,11 +73,29 @@ spec:
                   key: POSTGRES_DB
             - name: DB_URL
               value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
-            - name: REDIS_URL
-              value: "redis://redis:6379/0"
           volumeMounts:
+            - name: uploads
+              mountPath: /data/uploads
             - name: hf-cache
               mountPath: /root/.cache/huggingface
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            periodSeconds: 10
+            failureThreshold: 180
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            periodSeconds: 15
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8000
+            periodSeconds: 10
+            timeoutSeconds: 5
           resources:
             limits:
               nvidia.com/gpu: 1           # 請求 1 張 GPU
@@ -85,7 +103,22 @@ spec:
               cpu: 100m
               memory: 512Mi
       volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: stt-uploads
         - name: hf-cache
           hostPath:
             path: /opt/hf-cache           # Host 上的固定路徑，避免重下載模型
             type: DirectoryOrCreate
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: stt-uploads
+  namespace: finance
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi

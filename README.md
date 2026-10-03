@@ -18,7 +18,7 @@
 | [`finance-scraper-service`](https://github.com/pei9564/finance-scraper-service) | 收外部來源 → 經 LLM gateway 翻譯/摘要 → 寫入 PG | Python / FastAPI |
 | [`stt-ai-worker`](https://github.com/pei9564/stt-ai-worker) | 音訊轉逐字稿 (Podcast / YouTube),faster-whisper GPU 推論 | Python / FastAPI |
 
-Pipeline:`collect → STT → translate → summarize`。scraper 是 IO 為主,STT 是 GPU 為主,Redis 串接兩條管線,PG 是唯一資料交會點。
+使用流程：`collect → 按需求 STT → 手動 translate / summarize`，收集時另產生跨來源日報摘要。scraper 是 IO 為主,STT 是 GPU 為主,scraper 透過 HTTP 提交 STT 任務並輪詢結果，PG 儲存事件、任務與逐字稿。Redis 目前未被應用使用，保留作為未來擴充。
 
 切成 3 repo 的理由:
 - **執行特性差異** — scraper IO 重 (API + httpx + DB),STT GPU 重 (VRAM ~6 GB),image 大小、scaling 策略、CI 都不同
@@ -44,18 +44,16 @@ flowchart TB
 
     scraper -- "PG_DSN" --> pg
     stt -- "DB_URL" --> pg
-    scraper -- "REDIS_URL" --> redis
-    stt -- "REDIS_URL" --> redis
+    redis -. "預留，應用尚未使用" .-> scraper
     scraper -- "VLLM_BASE_URL<br/>(host.docker.internal)" --> vllm
     scraper -- "STT_BASE_URL<br/>(internal DNS)" --> stt
-    watchtower -. "poll + pull + restart" .-> scraper
-    watchtower -. "poll + pull + restart" .-> stt
 ```
 
 關鍵設計選擇:
-- **PG / Redis 不貼 watchtower label** — 自動更新只動 scraper/stt 的 application image,stateful 服務手動升級
+- **Compose 的 PG / Redis 不貼 watchtower label** — 自動更新只動 scraper/stt 的 application image,stateful 服務手動升級
 - **vLLM 跑在 host 而非 compose 內** — GPU 直通效率較高、模型權重重啟成本大;`host.docker.internal` 從容器連回 host
-- **scraper 與 STT 不直接耦合** — 兩條 pipeline 各自獨立,PG 是唯一交會點
+- **scraper 透過 STT HTTP API 整合** — 提交任務後輪詢結果，STT 自己管理任務與逐字稿；scraper 將結果寫回事件正文
+- **STT 任務持久化** — PG 保存來源描述；單一 worker 使用程序內佇列，重啟時從 PG 恢復未完成任務；上傳音檔保存於 volume / PVC
 
 ---
 
@@ -111,7 +109,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 ---
 
-## 自動部署 (watchtower)
+## Compose 自動部署 (watchtower)
+
+此機制只適用 Compose；K3s 不會由 watchtower 更新。K3s 更新請套用新 image tag 的 manifest，或在推送 `latest` 後執行 `kubectl rollout restart deployment/finance-scraper-service deployment/stt-ai-worker -n finance`。
 
 scraper 與 stt 兩個 service 貼了 `com.centurylinklabs.watchtower.enable=true` label。流程:
 
@@ -192,3 +192,13 @@ K3s 落地後 docker-compose 仍保留作為本地開發環境。
 
 原 [`ai-infra-portfolio`](https://github.com/pei9564/ai-infra-portfolio) (Quartz 站) 已退役,內容遷至本 repo `docs/`。
 -->
+
+## 健康檢查與任務恢復
+
+兩個服務皆提供 `/healthz` 與 `/readyz`。scraper readiness 檢查 PostgreSQL；STT liveness 檢查 worker thread，readiness 另外檢查 PG。STT startup probe 最多等待 30 分鐘讓模型載入。
+
+STT 仍限定單一 replica、單一 uvicorn process；PG 任務恢復不是多 worker 分散式佇列。重啟後 queued / running 任務從頭重新執行，並非從音訊中斷點繼續。舊版沒有來源描述的任務會標為 error，需重新提交。
+
+上傳檔案掛載 `/data/uploads`（Compose named volume、K3s `stt-uploads` PVC）。失敗及取消任務保留音檔供手動重試；成功或刪除任務後清理。K3s local-path PVC 依賴原節點磁碟，不能保證節點故障後跨節點恢復。
+
+失敗任務可從 STT UI 按「重試」，或呼叫 `POST /job/{job_id}/retry`。已完成或執行中的任務不能重試。

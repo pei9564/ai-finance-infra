@@ -1,5 +1,5 @@
 services:
-  # 1. 中央大腦：Redis (負責任務排隊)
+  # 1. Redis：目前未使用，預留未來擴充
   redis:
     image: redis:7-alpine
     ports:
@@ -45,7 +45,6 @@ services:
       # --- infra 層級連線設定 (動態組裝) ---
       # finance-scraper-service 程式讀的是 PG_DSN (不是 DB_URL),要用 docker 服務名 postgres
       - PG_DSN=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      - REDIS_URL=redis://redis:6379/0  # 目前 finance-scraper-service 沒讀,保留給未來
       # 容器內無法用 localhost 連到 host 上的 vLLM gateway,用 host.docker.internal
       - VLLM_BASE_URL=${VLLM_BASE_URL:-http://host.docker.internal:8000/v1}
       # STT 走同 compose network 的 service name,不要打 host 的 localhost
@@ -58,8 +57,6 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"  # Linux 上讓容器能用 host.docker.internal 連回 host
     depends_on:
-      redis:
-        condition: service_healthy
       postgres:
         condition: service_healthy
 
@@ -73,7 +70,6 @@ services:
       - "8001:8000"  # 前端走 host 8001 → 容器 8000 (避開 finance-scraper-service 佔的 8000)
     environment:
       # --- infra 層級連線設定 (動態組裝) ---
-      - REDIS_URL=redis://redis:6379/0
       - DB_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       # --- application 設定 (從 .env 讀,給合理 default) ---
       - MODEL=${STT_MODEL:-medium}                    # tiny / base / small / medium / large-v3
@@ -85,9 +81,8 @@ services:
       # HF_CACHE_DIR: host 上的 HuggingFace model cache,容器內 mount 到 /root/.cache/huggingface
       # 避免每次重啟都重新下載幾 GB 的模型權重
       - ${HF_CACHE_DIR:-./hf_cache}:/root/.cache/huggingface
+      - stt_uploads:/data/uploads
     depends_on:
-      redis:
-        condition: service_healthy
       postgres:
         condition: service_healthy
     # GPU 模式 (STT_DEVICE=cuda 時需要 NVIDIA Container Toolkit)
@@ -120,4 +115,5 @@ services:
       - ${DOCKER_CONFIG_PATH:-~/.docker/config.json}:/config.json:ro
 
 volumes:
+  stt_uploads:
   pg_data:
