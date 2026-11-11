@@ -2,9 +2,7 @@
 
 > Home lab 上跑的 AI 金融知識引擎 — 編排層。法說會 / podcast / YouTube 等金融多媒體 → STT → LLM 摘要 → 結構化資料層,所有架構決策都從硬體約束反推。
 
-這個 repo **本身不寫業務邏輯**,職責是用 Kubernetes (K3s) 把幾個獨立服務、共享資料層接在一起,並當作整套系統的文件 hub。原有的 `docker-compose` 則退居本地開發與快速測試用。
-
-<!-- 📖 **完整架構敘事、ADR、互動 demo:** [pei9564.github.io/ai-finance-infra](https://pei9564.github.io/ai-finance-infra/) -->
+這個 repo **本身不寫業務邏輯**,職責是用 Kubernetes (K3s) 把幾個獨立服務、共享資料層接在一起。原有的 `docker-compose` 則退居本地開發與快速測試用。
 
 ---
 
@@ -321,20 +319,13 @@ A 是控制平面／DB 單點，local-path PVC 綁定原節點，Tailscale 不�
 
 ---
 
-<!-- 
-## 文件
+## 架構筆記
 
-`docs/` 是純靜態 HTML/CSS/JS,GitHub Pages 直接從 `docs/` 部署,無 build step:
+ADR（編排器選型、本地推論 runtime、環境隔離）、逐日工程決策日誌與互動 demo 放在
+[`notes`](https://github.com/pei9564/ai-finance-infra/tree/notes) 分支，沒有在持續經營，
+所以不放在 `main`。想看架構取捨的來龍去脈再切過去。
 
-| 入口 | 內容 |
-|---|---|
-| [Landing](https://pei9564.github.io/ai-finance-infra/) | 硬體基線 + 系統架構圖 + ADR 卡片 |
-| [Build log](https://pei9564.github.io/ai-finance-infra/viewer.html?file=build-log.md) | 每天工程決策日誌 |
-| [ADR-001 · 4 節點落位](https://pei9564.github.io/ai-finance-infra/demos/four-node-topology.html) | 互動 demo (docker-compose ↔ K3s 切換) |
-| [ADR-005 · 本地推論 runtime 選型](https://pei9564.github.io/ai-finance-infra/demos/serving-runtime-decision.html) | 互動 demo (vLLM vs Ollama vs llama.cpp) |
-
-原 [`ai-infra-portfolio`](https://github.com/pei9564/ai-infra-portfolio) (Quartz 站) 已退役,內容遷至本 repo `docs/`。
--->
+`main` 的 `docs/` 只保留操作文件：K3s/Tailscale 安裝、Compose → K3s 遷移、備份與還原。
 
 ## 健康檢查與任務恢復
 
