@@ -17,7 +17,7 @@ title: "📜 ADR-006:test / production 環境隔離策略"
 需求 / 約束:
 
 - **單人 dev,但 ingestion 已是「實際在跑」的 workload** — 抓壞 24 小時資料可以,但不能弄丟摘要邏輯
-- **硬體預算極緊**(見[硬體基線](./)) — `node-b` 30 GB 是唯一夠扛 control-plane + Postgres + pgvector 的節點,沒有第二個位置擺第二個 control-plane
+- **硬體預算極緊**(見[硬體基線](./)) — `node-b` 的 ~32 GB 是唯一夠扛 control-plane + Postgres + pgvector 的節點,沒有第二個位置擺第二個 control-plane
 - **GPU 是唯一的**(`node-a` 上一張 Ampere 4 GB) — test 跟 prod 不能同時各佔一個 STT pod
 - **生態系不能切斷** — kubectl / helm / argo / kustomize 都要能直接用,自架工具的成本承擔不起
 
@@ -53,7 +53,7 @@ title: "📜 ADR-006:test / production 環境隔離策略"
 - GPU:`nvidia.com/gpu: 1` 同一時刻只能給一個 pod,prod 跑生產 ingestion 時 test 的 STT pod 縮到 0(透過 Argo / kubectl scale,不自動)
 
 > **IMPORTANT**
-> **技術理由:** 物理 cluster(Option A)的 RAM 成本直接撞到 `node-b` 30 GB 的硬天花板,而 4 節點 home lab 的隔離需求不到那個強度 — 「test 不要爆到 prod」用 ResourceQuota + NetworkPolicy 就能擋住 90% 的失敗情境,剩下 10%(cluster-scoped 物件、etcd) 用「test 不裝 CRD / 不亂建大量物件」這條開發紀律補。vcluster(Option C) 是為 multi-tenant SaaS 設計的,在這個場景把單純的 namespace pattern 換成多一層 virtual API server,只是把 K3s 選型本來節省的 moving part 補回來。Namespace 是 K8s primitive,所有工具(kubectl / helm / Argo / kustomize) 零摩擦支援。
+> **技術理由:** 物理 cluster(Option A)的 RAM 成本直接撞到 `node-b` ~32 GB 的硬天花板,而 4 節點 home lab 的隔離需求不到那個強度 — 「test 不要爆到 prod」用 ResourceQuota + NetworkPolicy 就能擋住 90% 的失敗情境,剩下 10%(cluster-scoped 物件、etcd) 用「test 不裝 CRD / 不亂建大量物件」這條開發紀律補。vcluster(Option C) 是為 multi-tenant SaaS 設計的,在這個場景把單純的 namespace pattern 換成多一層 virtual API server,只是把 K3s 選型本來節省的 moving part 補回來。Namespace 是 K8s primitive,所有工具(kubectl / helm / Argo / kustomize) 零摩擦支援。
 
 ## 4. 後續影響
 

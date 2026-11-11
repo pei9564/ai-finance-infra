@@ -30,7 +30,7 @@
     <p class="label">⛔ 五條無法繞過的事實</p>
     <p>① <b>唯一可用的現代 GPU</b> 在 <code class="mono">node-a</code>（Ampere cc 8.6）；<code class="mono">node-c</code> 的 Maxwell cc 5.0 被 PyTorch 停止支援，等於沒有。<br>
        ② <b>唯一的旋轉硬碟</b> 在 <code class="mono">node-c</code> — 淘汰它扛任何延遲敏感角色（etcd、Postgres）。<br>
-       ③ <b>30 GB 記憶體集中在沒 GPU 的</b> <code class="mono">node-b</code> — 它天生是有狀態服務 + control-plane 的人選。<br>
+       ③ <b>記憶體集中在沒 GPU 的</b> <code class="mono">node-b</code> — 它天生是有狀態服務 + control-plane 的人選。<br>
        ④ <b>全是會 sleep 的 laptop、僅 WiFi</b> — 3-node etcd HA 不可行，HA 被明確取捨掉。<br>
        ⑤ <code class="mono">node-a</code> <b>正在 swap-thrash</b>（16 GB 上同時扛 Whisper + Postgres + Redis）— 這才是遷移 K3s 的主因。</p>
   </div>
@@ -46,8 +46,8 @@
   <p class="lead">在這組 laptop 規格的叢集上，HA 是被取捨掉的。遷移的真正目的是<b>把有狀態服務從 GPU node 拔走</b>：</p>
   <ol class="chain">
     <li><b>問題的根源是共置。</b>Production workload 跟 Whisper STT 擠在同一台 <code class="mono">node-a</code> 的 16 GB 上 → 持續 swap 壓力。</li>
-    <li><b>把 Postgres / Redis / queue broker 搬到 <code class="mono">node-b</code></b>（30 GB、無 GPU 爭用），讓 <code class="mono">node-a</code> 把全部 16 GB RAM + 4 GB VRAM 都留給 inference。</li>
-    <li><b>冷資料落到 <code class="mono">node-c</code></b> 的 ~900 GB 閒置 HDD（cold backup + object storage）— 把劣勢硬碟轉成優勢角色。</li>
+    <li><b>把 Postgres / Redis / queue broker 搬到 <code class="mono">node-b</code></b>（記憶體最大、無 GPU 爭用），讓 <code class="mono">node-a</code> 把全部 16 GB RAM + 4 GB VRAM 都留給 inference。</li>
+    <li><b>冷資料落到 <code class="mono">node-c</code></b> 的閒置 HDD（cold backup + object storage）— 把劣勢硬碟轉成優勢角色。</li>
     <li><b>接受 <code class="mono">node-b</code> 的 SPOF 風險。</b>laptop 會 sleep，但在單人 home-lab，cluster 簡潔性 &gt; HA — 這是清醒的取捨，不是疏忽。</li>
   </ol>
 
@@ -63,7 +63,7 @@
     nodes: [
       {
         id: 'node-a', name: 'node-a', tag: 'GPU', accent: 'green',
-        specs: ['x86 laptop 2021', '8C/16T · Intel 11th-gen H', '16 GB ⚠️ swap 壓力', 'Ampere 4 GB · cc 8.6 ✅', 'NVMe 250 GB'],
+        specs: ['x86 laptop', '8C/16T', '16 GB ⚠️ swap 壓力', 'Ampere 4 GB · cc 8.6 ✅', '小容量 NVMe'],
         why: '整個叢集唯一能跑 CUDA 的現代 GPU（Ampere cc 8.6）。',
         whyNot: '若再兼 control-plane，會在 Whisper 負載下 OOM — 所以它只當 GPU worker。',
         byMode: {
@@ -73,8 +73,8 @@
       },
       {
         id: 'node-b', name: 'node-b', tag: 'control-plane', accent: 'blue',
-        specs: ['x86 laptop 2024', '2P+8E/10T · Intel U', '30 GB ✅ 最大', 'Intel iGPU', 'NVMe 477 GB（用量 63% ⚠️）'],
-        why: 'RAM 最大（30 GB）、NVMe 低延遲、且沒有 GPU 爭用 — 有狀態服務的天然歸宿。',
+        specs: ['x86 laptop', '10T · 低功耗', '~32 GB ✅ 最大', 'Intel iGPU', '中大容量 NVMe'],
+        why: 'RAM 最大、NVMe 低延遲、且沒有 GPU 爭用 — 有狀態服務的天然歸宿。',
         whyNot: 'laptop 會 sleep → 接受它成為 SPOF（單人 home-lab 下換取 cluster 簡潔性）。',
         byMode: {
           current: { role: 'docker-compose — 有狀態雜項', workloads: ['pgvector', 'MinIO', 'MCP hub', 'redis'], note: '目前各服務各自為政，無統一編排。' },
@@ -83,8 +83,8 @@
       },
       {
         id: 'node-c', name: 'node-c', tag: 'storage / edge', accent: 'amber',
-        specs: ['x86 laptop 2016', '4C/8T · Intel 6th-gen H', '12 GB ✅', 'Maxwell 2 GB ❌ PyTorch 停止支援', 'HDD 931 GB ⚠️ 旋轉碟'],
-        why: '~900 GB 閒置 HDD 是 cold backup / object storage 的理想容器；且已在跑 traefik。',
+        specs: ['x86 laptop（較舊）', '4C/8T', '12 GB ✅', 'Maxwell 2 GB ❌ PyTorch 停止支援', '~1 TB HDD ⚠️ 旋轉碟'],
+        why: '大容量閒置 HDD 是 cold backup / object storage 的理想容器；且已在跑 traefik。',
         whyNot: 'HDD 跑 etcd / Postgres 是延遲災難；Maxwell GPU 對 ML 排程等於不存在。',
         byMode: {
           current: { role: 'docker-compose — 邊緣服務', workloads: ['n8n', 'traefik', 'portainer'], note: 'GPU 與 HDD 都不適合運算密集或延遲敏感角色。' },
@@ -93,7 +93,7 @@
       },
       {
         id: 'dev-mac', name: 'dev-mac', tag: 'workstation', accent: 'purple', excluded: true,
-        specs: ['ARM laptop 2024', 'Apple M3 · 8C', '16 GB ⚠️', 'Apple M3 GPU', 'APFS 460 GB'],
+        specs: ['ARM 工作站', '8C', '16 GB ⚠️', 'ARM iGPU', '中大容量 SSD'],
         why: '最適合當 kubectl client + IDE 主機，透過 Tailscale 操作叢集。',
         whyNot: 'macOS 不能原生跑 kubelet；硬塞 ARM VM 會把 16 GB 壓垮 — 所以刻意不入 cluster。',
         byMode: {

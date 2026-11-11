@@ -29,10 +29,10 @@
 </thead>
 <tbody>
 <tr><td>角色</td><td>GPU worker</td><td>control-plane + stateful</td><td>storage edge</td><td>workstation（不入 cluster）</td></tr>
-<tr><td>CPU</td><td>8C/16T · Intel 11th-gen</td><td>10T · Intel U-series</td><td>4C/8T · Intel 6th-gen</td><td>Apple M3 · 8C</td></tr>
-<tr><td>RAM</td><td>16 GB <span class="chip chip--warn">swap 壓力</span></td><td><strong>30 GB</strong></td><td>12 GB</td><td>16 GB</td></tr>
-<tr><td>GPU</td><td><strong>Ampere 4 GB</strong>(cc 8.6)</td><td>Intel iGPU</td><td>Maxwell 2 GB <span class="chip chip--bad">PyTorch 已停支</span></td><td>Apple M3 GPU</td></tr>
-<tr><td>Storage</td><td>NVMe 250 GB</td><td>NVMe 477 GB (63%)</td><td><strong>HDD 931 GB</strong>（冷儲存）</td><td>APFS 460 GB</td></tr>
+<tr><td>CPU</td><td>8C/16T</td><td>10T · 低功耗</td><td>4C/8T · 老架構</td><td>ARM 工作站 · 8C</td></tr>
+<tr><td>RAM</td><td>16 GB <span class="chip chip--warn">swap 壓力</span></td><td><strong>~32 GB</strong>（最大）</td><td>12 GB</td><td>16 GB</td></tr>
+<tr><td>GPU</td><td><strong>Ampere 4 GB</strong>(cc 8.6)</td><td>Intel iGPU</td><td>Maxwell 2 GB <span class="chip chip--bad">PyTorch 已停支</span></td><td>ARM iGPU</td></tr>
+<tr><td>Storage</td><td>小容量 NVMe</td><td>中大容量 NVMe</td><td><strong>~1 TB HDD</strong>（冷儲存）</td><td>中大容量 SSD</td></tr>
 </tbody>
 </table>
 

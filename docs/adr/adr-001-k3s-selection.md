@@ -26,7 +26,7 @@ title: "📜 ADR-001:容器編排器選型"
 ### Option A:Vanilla Kubernetes(`kubeadm`)
 
 - **Pros:** 業界標準，生態系最豐富（NVIDIA GPU Operator、Argo、Strimzi 等）。
-- **Cons:** Control-plane 基線 ≥ 2 GB RAM；多個 binary（etcd、kube-apiserver、scheduler、controller-manager、kubelet）要維護。在一台還要扛 Postgres + pgvector 的 30 GB control-plane node 上，這個開銷太奢侈。
+- **Cons:** Control-plane 基線 ≥ 2 GB RAM；多個 binary（etcd、kube-apiserver、scheduler、controller-manager、kubelet）要維護。在一台還要扛 Postgres + pgvector 的最大 RAM control-plane node 上，這個開銷太奢侈。
 
 ### Option B:Docker Swarm
 
@@ -48,7 +48,7 @@ title: "📜 ADR-001:容器編排器選型"
 選擇 **Option D:K3s**。
 
 > **IMPORTANT**
-> **技術理由：** K3s 是唯一同時滿足以下三點的候選：(a) 符合 laptop node 的 RAM 預算、(b) 保留完整 `kubectl` / helm / 標準 manifest 相容、(c) 留住整個 Kubernetes ML/MLOps 生態系的進場機會。Vanilla k8s 的 RAM 開銷會吃進 `node-b` 那 30 GB 我們明確需要留給 Postgres + pgvector 的空間。Swarm 與 Nomad 會把平台跟主流 ML 工具鏈隔開 — 這個策略成本遠大於它們帶來的操作簡潔性。
+> **技術理由：** K3s 是唯一同時滿足以下三點的候選：(a) 符合 laptop node 的 RAM 預算、(b) 保留完整 `kubectl` / helm / 標準 manifest 相容、(c) 留住整個 Kubernetes ML/MLOps 生態系的進場機會。Vanilla k8s 的 RAM 開銷會吃進 `node-b` 那份我們明確需要留給 Postgres + pgvector 的空間。Swarm 與 Nomad 會把平台跟主流 ML 工具鏈隔開 — 這個策略成本遠大於它們帶來的操作簡潔性。
 
 ## 4. 後續影響
 
